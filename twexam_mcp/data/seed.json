@@ -1,0 +1,18 @@
+[
+  {"year":113,"exam_code":"sl1","subject":"憲法與行政法","q_no":1,"q_type":"mcq",
+   "stem":"關於法律保留原則，下列敘述何者正確？",
+   "options":["A 僅適用刑罰","B 涉及人民權利義務應有法律依據","C 不拘束行政","D 僅學說"],
+   "answer":"B","statutes":["中央法規標準法§5"],"model_answer":null},
+  {"year":113,"exam_code":"sl1","subject":"憲法與行政法","q_no":2,"q_type":"mcq",
+   "stem":"行政處分之構成要件效力，下列何者正確？",
+   "options":["A 無拘束力","B 他機關應尊重","C 得任意推翻","D 僅及於相對人"],
+   "answer":"B","statutes":["行政程序法§92"],"model_answer":null},
+  {"year":113,"exam_code":"sl2","subject":"刑法","q_no":1,"q_type":"essay",
+   "stem":"甲基於殺人故意對乙開槍，試論甲之罪責。",
+   "options":[],"answer":null,"statutes":["刑法§271"],
+   "model_answer":"一、甲成立刑法第271條第1項殺人既遂罪。(AI 擬答示意)"},
+  {"year":112,"exam_code":"sl1","subject":"民法與民事訴訟法","q_no":3,"q_type":"mcq",
+   "stem":"關於消滅時效，下列何者正確？",
+   "options":["A 期間不得約定","B 完成後債權消滅","C 完成後債務人得拒絕給付","D 法院應依職權"],
+   "answer":"C","statutes":["民法§144"],"model_answer":null}
+]

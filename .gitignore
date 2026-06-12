@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# build artifacts
+dist/
+build/
+
+# downloaded PDF cache (rebuildable, large binaries)
+twexam_mcp/data/pdfs/
+
+# phone-serving bearer token (local secret)
+.twexam_token

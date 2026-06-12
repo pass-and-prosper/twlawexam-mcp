@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "twexam": {
+      "command": ".venv\\Scripts\\python.exe",
+      "args": ["-m", "twexam_mcp.server"]
+    }
+  }
+}
