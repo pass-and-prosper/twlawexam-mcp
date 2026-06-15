@@ -28,9 +28,11 @@ powershell -File twexam-mcp\scripts\serve_phone.ps1
 
 ### 視窗 2：開通道
 ```powershell
-cloudflared tunnel --url http://127.0.0.1:8000
+cloudflared tunnel --url http://127.0.0.1:8000 --http-host-header 127.0.0.1:8000
 ```
 它會印出一個網址，像 `https://random-words-1234.trycloudflare.com`。**這就是你的對外網址。**
+
+> ⚠️ `--http-host-header 127.0.0.1:8000` 一定要加。MCP 伺服器有 DNS 重綁定防護，會擋掉非本機的 Host；少了這個參數，帶密碼的請求會回 **421 Invalid Host header**。這個參數讓通道把 Host 改寫成 `127.0.0.1:8000`，伺服器才收。
 
 ---
 
