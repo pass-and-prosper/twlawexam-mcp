@@ -172,6 +172,11 @@ def assemble(conn) -> dict:
     upath = db.default_db_path().parent / "untested_issues.json"
     untested = json.loads(upath.read_text(encoding="utf-8")) if upath.exists() else {}
 
+    # tested 爭點 enrich 後的學說(含學者)/實務(具體字號)，覆蓋擬答抽出的籠統版 — bundled JSON
+    epath = db.default_db_path().parent / "issue_enrich.json"
+    enrich_raw = json.loads(epath.read_text(encoding="utf-8")) if epath.exists() else {}
+    enrich = {"e:" + canon: v for canon, v in enrich_raw.items()}
+
     # 考點重點(primer) + 各題擬答(answers) — 依 canonical 爭點名手寫 markdown，bundled JSON
     ppath = db.default_db_path().parent / "issue_primers.json"
     primers_src = json.loads(ppath.read_text(encoding="utf-8")) if ppath.exists() else {}
@@ -227,7 +232,7 @@ def assemble(conn) -> dict:
 
     return {
         "sl1": sl1, "sl2": sl2, "detail": detail, "uncovered_list": uncovered_list,
-        "primers": primers,
+        "primers": primers, "enrich": enrich,
         "summary": {
             "mcq_topics": len(_all_syllabus_topics()),
             "essay_issues": sum(len(s["issues"]) for s in sl2),
@@ -395,10 +400,13 @@ function openDrawer(id,year){
   if(year){ qs=by[year]||[]; suffix=`・${year} 年（${qs.length} 題）`; }
   else { const ys=Object.keys(by).sort((a,b)=>b-a); qs=[].concat(...ys.map(y=>by[y])); suffix=`（${qs.length} 題）`; }
   $('#dtitle').textContent=label+suffix;
+  const en=(id[0]==='e')?(DATA.enrich&&DATA.enrich[id]):null;  // tested 爭點 enrich 後學說/實務
   const qhtml=qs.map(q=>{
     let ex='';
-    if(q.doctrines&&q.doctrines.length) ex+=`<div class="tag">學說</div>`+q.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
-    if(q.practice&&q.practice.length) ex+=`<div class="tag">實務</div><div class="pr">${q.practice.map(esc).join('｜')}</div>`;
+    if(!en){  // enrich 存在時逐題籠統學說/實務不重複顯示（頂端統一顯示 enrich 版）
+      if(q.doctrines&&q.doctrines.length) ex+=`<div class="tag">學說</div>`+q.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
+      if(q.practice&&q.practice.length) ex+=`<div class="tag">實務</div><div class="pr">${q.practice.map(esc).join('｜')}</div>`;
+    }
     if(q.untested){
       const m=srcMeta(q.source);
       const extra=q.gk_source||q.ls_source||'';
@@ -413,9 +421,16 @@ function openDrawer(id,year){
     return `<div class="q"><span class="yr">${q.year} 年</span><span class="qid">${esc(q.qid)} · ${kind}</span>
       <div class="stem">${esc(q.stem)}</div>${ans}${ex}</div>`;
   }).join('')||'<p style="color:#86868b">（無資料）</p>';
+  // tested 爭點：enrich 後的學說(含學者)/實務(具體字號) 放最上面，統一顯示一次
+  let enh='';
+  if(en){
+    if(en.doctrines&&en.doctrines.length) enh+=`<div class="tag">學說（含學者／標準說）</div>`+en.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
+    if(en.practice&&en.practice.length) enh+=`<div class="tag">實務（字號·已驗）</div><div class="pr">${en.practice.map(esc).join('｜')}</div>`;
+    if(enh) enh=`<div class="q" style="border-bottom:2px solid var(--line)">${enh}</div>`;
+  }
   // 考點重點(primer)：放在題目清單下方，全年份/單年都顯示
   const prim=(DATA.primers&&DATA.primers[id])?`<div class="primer"><div class="ptag">◆ 考點重點 ◆</div><div class="md">${DATA.primers[id]}</div></div>`:'';
-  $('#dbody').innerHTML=qhtml+prim;
+  $('#dbody').innerHTML=enh+qhtml+prim;
   $('#scrim').classList.add('on');$('#drawer').classList.add('on');
 }
 function closeDrawer(){$('#scrim').classList.remove('on');$('#drawer').classList.remove('on');}
