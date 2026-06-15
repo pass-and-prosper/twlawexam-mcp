@@ -105,6 +105,22 @@ def init_schema(conn: sqlite3.Connection) -> None:
             primer      TEXT NOT NULL,
             updated_at  TEXT
         );
+
+        -- 申論「爭點」索引: an essay's real 考點 is the 爭點 (學說對立 / 實務見解
+        -- 交鋒點), since grading rewards writing out the doctrines + court view.
+        -- One question → many 爭點. doctrines / practice are JSON lists.
+        CREATE TABLE IF NOT EXISTS essay_issues (
+            qid           TEXT NOT NULL,
+            issue_no      INTEGER NOT NULL,          -- 1..N within the question
+            issue         TEXT NOT NULL,             -- 爭點名 (e.g. 不能未遂之判斷標準)
+            doctrines     TEXT NOT NULL DEFAULT '[]',-- JSON list of 學說 (通說/少數說/對立)
+            practice      TEXT NOT NULL DEFAULT '[]',-- JSON list of 實務 (判例/決議/釋字/憲判字號)
+            topic_subject TEXT,                       -- denormalized for filtering
+            updated_at    TEXT,
+            PRIMARY KEY (qid, issue_no)
+        );
+        CREATE INDEX IF NOT EXISTS idx_issue ON essay_issues(issue);
+        CREATE INDEX IF NOT EXISTS idx_issue_qid ON essay_issues(qid);
         """
     )
     conn.commit()
@@ -455,6 +471,88 @@ def apply_statute_map(conn: sqlite3.Connection) -> int:
                     conn.execute("INSERT OR IGNORE INTO statute_xref (statute, qid) VALUES (?,?)",
                                  (s, qid))
                 n += cur.rowcount
+    return n
+
+
+# ---------------------------------------------------------------------------
+# 申論爭點索引: 學說/實務交鋒點 — the real 考點 of an essay
+# ---------------------------------------------------------------------------
+def replace_issues(conn: sqlite3.Connection, qid: str, issues: list[dict]) -> int:
+    """Replace all 爭點 rows for one essay. issues: [{issue, doctrines[], practice[]}].
+
+    Idempotent per qid (delete-then-insert) so re-extraction is safe. Returns
+    the number of 爭點 stored. topic_subject is denormalized from questions.
+    """
+    today = date.today().isoformat()
+    ts = conn.execute("SELECT topic_subject FROM questions WHERE qid=?", (qid,)).fetchone()
+    topic_subject = ts[0] if ts else None
+    with conn:
+        conn.execute("DELETE FROM essay_issues WHERE qid=?", (qid,))
+        for i, it in enumerate(issues, start=1):
+            conn.execute(
+                """INSERT INTO essay_issues
+                   (qid, issue_no, issue, doctrines, practice, topic_subject, updated_at)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (qid, i, it["issue"],
+                 json.dumps(it.get("doctrines", []), ensure_ascii=False),
+                 json.dumps(it.get("practice", []), ensure_ascii=False),
+                 topic_subject, today),
+            )
+    return len(issues)
+
+
+def get_issues(conn: sqlite3.Connection, qid: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT issue_no, issue, doctrines, practice FROM essay_issues WHERE qid=? ORDER BY issue_no",
+        (qid,),
+    ).fetchall()
+    return [{"issue_no": r[0], "issue": r[1],
+             "doctrines": json.loads(r[2]), "practice": json.loads(r[3])} for r in rows]
+
+
+def issue_distribution(conn: sqlite3.Connection, topic_subject: str | None = None) -> list[tuple]:
+    """(issue, n_questions, topic_subject) rows, most-frequent first — the REAL
+    申論考點分布 (by 爭點, not surface 罪名/章節)."""
+    if topic_subject:
+        rows = conn.execute(
+            """SELECT issue, COUNT(DISTINCT qid), MAX(topic_subject) FROM essay_issues
+               WHERE topic_subject=? GROUP BY issue ORDER BY 2 DESC, issue""",
+            (topic_subject,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT issue, COUNT(DISTINCT qid), MAX(topic_subject) FROM essay_issues
+               GROUP BY issue ORDER BY 2 DESC, issue"""
+        ).fetchall()
+    return [(r[0], r[1], r[2]) for r in rows]
+
+
+def questions_by_issue(conn: sqlite3.Connection, issue: str) -> list[dict]:
+    """Every essay that examined this 爭點, with its 學說/實務 for that 爭點."""
+    rows = conn.execute(
+        """SELECT e.qid, q.year, q.subject, e.doctrines, e.practice
+           FROM essay_issues e JOIN questions q ON q.qid=e.qid
+           WHERE e.issue=? ORDER BY q.year DESC""",
+        (issue,),
+    ).fetchall()
+    return [{"qid": r[0], "year": r[1], "subject": r[2],
+             "doctrines": json.loads(r[3]), "practice": json.loads(r[4])} for r in rows]
+
+
+def apply_essay_issues(conn: sqlite3.Connection) -> int:
+    """Restore 爭點 index from the bundled essay_issues.json (DB git-ignored).
+
+    Mirrors apply_essay_answers. JSON shape: {qid: [{issue, doctrines, practice}]}.
+    Returns the number of 爭點 rows restored.
+    """
+    try:
+        raw = (resources.files("twexam_mcp.data") / "essay_issues.json").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return 0
+    mapping = json.loads(raw)
+    n = 0
+    for qid, issues in mapping.items():
+        n += replace_issues(conn, qid, issues)
     return n
 
 

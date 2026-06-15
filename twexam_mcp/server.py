@@ -5,7 +5,7 @@ from mcp.server.fastmcp import FastMCP
 
 from twexam_mcp.cache import db
 from twexam_mcp.tools import (
-    question_search, exam_catalog, answers, statute_xref, practice, exam_map, review,
+    question_search, exam_catalog, answers, statute_xref, practice, exam_map, review, issues,
 )
 
 # Server instructions bake the study experience into the MCP so ANY client
@@ -172,6 +172,24 @@ def get_readiness(target: float = 0.60, q_type: str = "mcq", daily: int = 25) ->
 def get_topic_primer(topic_point: str) -> dict:
     """考點重點提示：做題前必讀的核心法條／常考判決釋字／學說對立／易錯陷阱。"""
     return review.get_topic_primer(get_conn(), topic_point)
+
+
+@mcp.tool()
+def get_issue_distribution(topic_subject: str | None = None) -> list[dict]:
+    """爭點熱度排行：申論真實考點（學說/實務交鋒點）考過幾題，由多到少。可選子科目篩選。"""
+    return issues.get_issue_distribution(get_conn(), topic_subject)
+
+
+@mcp.tool()
+def search_by_issue(issue: str) -> list[dict]:
+    """依爭點找題：某爭點（如「不能未遂之判斷標準」）考過哪幾題，附各題的學說對立與實務見解。"""
+    return issues.search_by_issue(get_conn(), issue)
+
+
+@mcp.tool()
+def get_issues(qid: str) -> list[dict]:
+    """取某申論題拆出的所有爭點：爭點名＋學說對立＋實務見解（判例/決議/釋字/憲判字號）。"""
+    return issues.get_issues(get_conn(), qid)
 
 
 def main() -> None:
