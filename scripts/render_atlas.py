@@ -86,11 +86,24 @@ def assemble(conn) -> dict:
         by_subject.setdefault(canon_subject[canon], []).append((canon, by_year))
     order = [it["subject"] for it in _SL2_MAP]
     subj_keys = sorted(by_subject, key=lambda s: (order.index(s) if s in order else 99, s))
+
+    # 研究推測的「重要但還沒考過」爭點 (agent 查 + legal-db 驗字號) — bundled JSON
+    upath = db.default_db_path().parent / "untested_issues.json"
+    untested = json.loads(upath.read_text(encoding="utf-8")) if upath.exists() else {}
+
     sl2 = []
+    n_untested = 0
     for ts in subj_keys:
         issues = [entry_canon("e:" + canon, canon, by_year) for canon, by_year in by_subject[ts]]
         issues.sort(key=lambda x: (-x["total"], x["label"]))
-        sl2.append({"subject": ts, "issues": issues})
+        uts = []
+        for j, u in enumerate(untested.get(ts, [])):
+            uid = f"u:{ts}:{j}"
+            detail[uid] = [{"untested": True, "issue": u["issue"], "why": u.get("why", ""),
+                            "doctrines": u.get("doctrines", []), "practice": u.get("practice", [])}]
+            uts.append({"id": uid, "label": u["issue"]})
+        n_untested += len(uts)
+        sl2.append({"subject": ts, "issues": issues, "untested": uts})
 
     # 未考過：不信分類標籤(會誤標)，改用內容關鍵字(含縮寫同義詞)是否出現
     tested = {r[0] for r in conn.execute(
@@ -119,6 +132,7 @@ def assemble(conn) -> dict:
             "mcq_topics": len(_all_syllabus_topics()),
             "essay_issues": sum(len(s["issues"]) for s in sl2),
             "uncovered": len(uncovered_list),
+            "untested": n_untested,
             "total_q": conn.execute("SELECT COUNT(*) FROM questions").fetchone()[0],
         },
     }
@@ -183,6 +197,11 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .ucard{border:1px solid #ffe0b8;background:#fffaf3;}
 .pills{display:flex;flex-wrap:wrap;gap:7px;}
 .upill{font-size:13px;padding:5px 11px;border-radius:980px;background:#fff;border:1.5px dashed var(--orange);color:#9a5b00;font-weight:500;}
+.gname.pred{color:#6a3df0;margin-top:20px;}
+.circ.pred{width:auto;height:auto;border-radius:980px;padding:5px 12px;background:#f3eeff;border:1.5px solid #cdbcff;
+ color:#6a3df0;font-size:12px;box-shadow:none;}
+.row.ut .label{color:#4a3a8c;}
+.row.ut:hover .label{color:#6a3df0;}
 """
 
 _JS = """
@@ -211,8 +230,12 @@ function subjectCard(tab,sub){
     return `<div class="card"><h3>${esc(sub.subject)}</h3><div class="meta">合計 ${tot} 題（選擇＋同考點申論）</div>${gs}</div>`;
   }
   const tot=sub.issues.reduce((a,i)=>a+i.total,0);
+  const ut=sub.untested||[];
+  const utRows=ut.map(u=>`<div class="row ut"><span class="label" data-id="${esc(u.id)}">${esc(u.label)}</span>
+    <span class="circs"><span class="circ pred">🔮 推測</span></span></div>`).join('');
+  const utSec=ut.length?`<div class="gname pred">🔮 還沒考過的重要爭點（研究推測＋字號已驗，${ut.length}）—— 點看學說/實務/為何可能考</div>${utRows}`:'';
   return `<div class="card"><h3>${esc(sub.subject)}</h3>
-    <div class="meta">${sub.issues.length} 個爭點 · ${tot} 題（申論）· 反覆考者粗體</div>${rows(sub.issues,true)}</div>`;
+    <div class="meta">${sub.issues.length} 個已考爭點 · ${tot} 題（申論）· 反覆考者粗體</div>${rows(sub.issues,true)}${utSec}</div>`;
 }
 function shortName(s){const m=s.match(/（(.+)）/);return m?m[1]:s;}
 function subjectBar(tab){
@@ -243,10 +266,15 @@ function openDrawer(id,year){
   else { const ys=Object.keys(by).sort((a,b)=>b-a); qs=[].concat(...ys.map(y=>by[y])); suffix=`（${qs.length} 題）`; }
   $('#dtitle').textContent=label+suffix;
   $('#dbody').innerHTML=qs.map(q=>{
-    const kind=q.essay?'申論':'選擇';
     let ex='';
     if(q.doctrines&&q.doctrines.length) ex+=`<div class="tag">學說</div>`+q.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
     if(q.practice&&q.practice.length) ex+=`<div class="tag">實務</div><div class="pr">${q.practice.map(esc).join('｜')}</div>`;
+    if(q.untested){
+      const why=q.why?`<div class="tag">為何可能考</div><div class="di" style="background:#f3eeff">${esc(q.why)}</div>`:'';
+      return `<div class="q"><span class="yr" style="background:#7b5cff">🔮 推測未考</span>
+        <div class="stem" style="font-weight:600">${esc(q.issue||'')}</div>${ex}${why}</div>`;
+    }
+    const kind=q.essay?'申論':'選擇';
     return `<div class="q"><span class="yr">${q.year} 年</span><span class="qid">${esc(q.qid)} · ${kind}</span>
       <div class="stem">${esc(q.stem)}</div>${ex}</div>`;
   }).join('')||'<p style="color:#86868b">（無資料）</p>';
@@ -272,7 +300,7 @@ def render(data: dict) -> str:
     chips = "".join(
         '<span class="chip"><b>' + str(v) + "</b> " + lbl + "</span>"
         for v, lbl in [(s["mcq_topics"], "考點"), (s["essay_issues"], "申論爭點"),
-                       (s["uncovered"], "未命中"), (s["total_q"], "題")]
+                       (s.get("untested", 0), "推測未考"), (s["total_q"], "題")]
     )
     legend = (
         '<div class="legend"><span>圈內＝民國年 · 顏色越深＝年份越近 · '
