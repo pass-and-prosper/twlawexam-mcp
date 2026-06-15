@@ -49,9 +49,15 @@ def assemble(conn) -> dict:
            FROM essay_issues e JOIN questions q ON q.qid=e.qid
            LEFT JOIN issue_canon c ON c.issue=e.issue"""
     ):
-        ess_canon.setdefault(canon, {}).setdefault(year, []).append(
-            {"qid": qid, "year": year, "stem": stem, "essay": True,
-             "doctrines": json.loads(doc), "practice": json.loads(prac), "issue": issue})
+        # dedup by qid within (canon, year): one essay with 2 issues mapping to the
+        # same canonical 爭點 must count ONCE (merge its 學說/實務), not show ×2.
+        slot = ess_canon.setdefault(canon, {}).setdefault(year, {})
+        if qid in slot:
+            slot[qid]["doctrines"] += json.loads(doc)
+            slot[qid]["practice"] += json.loads(prac)
+        else:
+            slot[qid] = {"qid": qid, "year": year, "stem": stem, "essay": True,
+                         "doctrines": json.loads(doc), "practice": json.loads(prac), "issue": issue}
         canon_subject[canon] = ts
 
     detail: dict[str, dict] = {}
@@ -75,7 +81,7 @@ def assemble(conn) -> dict:
         sl1.append({"subject": it["subject"], "groups": groups})
 
     def entry_canon(idd, label, by_year):
-        detail[idd] = {str(y): by_year[y] for y in by_year}
+        detail[idd] = {str(y): list(by_year[y].values()) for y in by_year}  # by_year[y] is {qid:entry}
         years = [{"year": y, "count": len(by_year[y]), "essay": True} for y in sorted(by_year)]
         total = sum(len(v) for v in by_year.values())
         return {"id": idd, "label": label, "years": years, "total": total,
@@ -100,8 +106,9 @@ def assemble(conn) -> dict:
         for j, u in enumerate(untested.get(ts, [])):
             uid = f"u:{ts}:{j}"
             detail[uid] = [{"untested": True, "issue": u["issue"], "why": u.get("why", ""),
-                            "doctrines": u.get("doctrines", []), "practice": u.get("practice", [])}]
-            uts.append({"id": uid, "label": u["issue"]})
+                            "doctrines": u.get("doctrines", []), "practice": u.get("practice", []),
+                            "source": u.get("source", ""), "gk_source": u.get("gk_source", "")}]
+            uts.append({"id": uid, "label": u["issue"], "source": u.get("source", "")})
         n_untested += len(uts)
         sl2.append({"subject": ts, "issues": issues, "untested": uts})
 
@@ -200,6 +207,7 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .gname.pred{color:#6a3df0;margin-top:20px;}
 .circ.pred{width:auto;height:auto;border-radius:980px;padding:5px 12px;background:#f3eeff;border:1.5px solid #cdbcff;
  color:#6a3df0;font-size:12px;box-shadow:none;}
+.circ.pred.gk{background:#e6f6ec;border-color:#a5dcb9;color:#0a7d3c;}
 .row.ut .label{color:#4a3a8c;}
 .row.ut:hover .label{color:#6a3df0;}
 """
@@ -230,10 +238,14 @@ function subjectCard(tab,sub){
     return `<div class="card"><h3>${esc(sub.subject)}</h3><div class="meta">合計 ${tot} 題（選擇＋同考點申論）</div>${gs}</div>`;
   }
   const tot=sub.issues.reduce((a,i)=>a+i.total,0);
-  const ut=sub.untested||[];
-  const utRows=ut.map(u=>`<div class="row ut"><span class="label" data-id="${esc(u.id)}">${esc(u.label)}</span>
-    <span class="circs"><span class="circ pred">🔮 推測</span></span></div>`).join('');
-  const utSec=ut.length?`<div class="gname pred">🔮 還沒考過的重要爭點（研究推測＋字號已驗，${ut.length}）—— 點看學說/實務/為何可能考</div>${utRows}`:'';
+  const ut=[...(sub.untested||[])].sort((a,b)=>(a.source==='高普考領先'?0:1)-(b.source==='高普考領先'?0:1));
+  const utRows=ut.map(u=>{
+    const gk=u.source==='高普考領先';
+    return `<div class="row ut"><span class="label" data-id="${esc(u.id)}">${esc(u.label)}</span>
+      <span class="circs"><span class="circ pred${gk?' gk':''}">${gk?'📈 高普考':'🔮 推測'}</span></span></div>`;
+  }).join('');
+  const nGk=ut.filter(u=>u.source==='高普考領先').length;
+  const utSec=ut.length?`<div class="gname pred">🔮 還沒考過的重要爭點（${ut.length}：研究推測${ut.length-nGk}＋📈高普考領先${nGk}，字號已驗）—— 點看學說/實務/為何可能考</div>${utRows}`:'';
   return `<div class="card"><h3>${esc(sub.subject)}</h3>
     <div class="meta">${sub.issues.length} 個已考爭點 · ${tot} 題（申論）· 反覆考者粗體</div>${rows(sub.issues,true)}${utSec}</div>`;
 }
@@ -270,9 +282,11 @@ function openDrawer(id,year){
     if(q.doctrines&&q.doctrines.length) ex+=`<div class="tag">學說</div>`+q.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
     if(q.practice&&q.practice.length) ex+=`<div class="tag">實務</div><div class="pr">${q.practice.map(esc).join('｜')}</div>`;
     if(q.untested){
+      const gk=q.source==='高普考領先';
+      const badge=gk?('📈 高普考領先'+(q.gk_source?'（'+esc(q.gk_source)+'）':'')):'🔮 研究推測';
       const why=q.why?`<div class="tag">為何可能考</div><div class="di" style="background:#f3eeff">${esc(q.why)}</div>`:'';
-      return `<div class="q"><span class="yr" style="background:#7b5cff">🔮 推測未考</span>
-        <div class="stem" style="font-weight:600">${esc(q.issue||'')}</div>${ex}${why}</div>`;
+      return `<div class="q"><span class="yr" style="background:${gk?'#0a7d3c':'#7b5cff'}">${badge}</span>
+        <div class="stem" style="font-weight:600;margin-top:6px">${esc(q.issue||'')}</div>${ex}${why}</div>`;
     }
     const kind=q.essay?'申論':'選擇';
     return `<div class="q"><span class="yr">${q.year} 年</span><span class="qid">${esc(q.qid)} · ${kind}</span>
