@@ -69,7 +69,7 @@ def assemble(conn) -> dict:
     sl1 = []
     for it in _SL1_MAP:
         groups = [{"name": ss["name"],
-                   "topics": [entry_topic("m:" + t, t, mcq.get(t, {}), es_t.get(t, {}))
+                   "topics": [entry_topic("m:" + t, t, mcq.get(t, {}), {})  # 一試只放選擇題
                               for t in ss["topics"]]}
                   for ss in it["sub_subjects"]]
         sl1.append({"subject": it["subject"], "groups": groups})
@@ -174,7 +174,7 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .drawer .x{border:none;background:#e8e8ed;border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;color:#3a3a3c;flex:0 0 auto;}
 .drawer .body{overflow:auto;padding:8px 22px 30px;}
 .q{padding:14px 0;border-bottom:1px solid var(--line);}
-.q .yr{display:inline-block;font-size:12px;font-weight:700;color:#fff;padding:2px 9px;border-radius:980px;margin-right:8px;}
+.q .yr{display:inline-block;font-size:12px;font-weight:700;color:#fff;background:var(--blue);padding:2px 9px;border-radius:980px;margin-right:8px;}
 .q .qid{font-size:11.5px;color:var(--muted);}
 .q .stem{margin:8px 0 0;font-size:13.5px;line-height:1.7;white-space:pre-wrap;}
 .q .tag{font-size:11px;font-weight:600;color:#6e6e73;margin-top:8px;}
@@ -188,15 +188,14 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 _JS = """
 const $=s=>document.querySelector(s);
 const BLUE={109:'#dcecfb',110:'#bcdcfa',111:'#94c6f6',112:'#5aa6f0',113:'#2f8be8',114:'#0a5fc2'};
-const AMBER={109:'#ffe7bd',110:'#ffd591',111:'#ffbf66',112:'#ffa838',113:'#fb8c00',114:'#e06b00'};
 function esc(s){return (s+'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function circles(e){
   if(!e.examined) return '<span class="circ none">未考</span>';
   return e.years.map(y=>{
-    const pal=y.essay?AMBER:BLUE, fill=pal[y.year]||(y.essay?'#fb8c00':'#7fbef9');
+    const fill=BLUE[y.year]||'#7fbef9';
     const badge=y.count>1?`<i>×${y.count}</i>`:'';
-    return `<span class="circ" data-id="${esc(e.id)}" data-year="${y.year}" title="${y.year}年 ${y.count}題 ${y.essay?'(含申論)':'(選擇)'}"
-      style="background:${fill};color:${y.year>=112?'#fff':'#3a2a06'}">${y.year}${badge}</span>`;
+    return `<span class="circ" data-id="${esc(e.id)}" data-year="${y.year}" title="${y.year}年 ${y.count}題"
+      style="background:${fill};color:${y.year>=112?'#fff':'#06294d'}">${y.year}${badge}</span>`;
   }).join('');
 }
 function rows(items,recur){
@@ -244,11 +243,11 @@ function openDrawer(id,year){
   else { const ys=Object.keys(by).sort((a,b)=>b-a); qs=[].concat(...ys.map(y=>by[y])); suffix=`（${qs.length} 題）`; }
   $('#dtitle').textContent=label+suffix;
   $('#dbody').innerHTML=qs.map(q=>{
-    const col=q.essay?'#fb8c00':'#0071e3', kind=q.essay?'申論':'選擇';
+    const kind=q.essay?'申論':'選擇';
     let ex='';
     if(q.doctrines&&q.doctrines.length) ex+=`<div class="tag">學說</div>`+q.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
     if(q.practice&&q.practice.length) ex+=`<div class="tag">實務</div><div class="pr">${q.practice.map(esc).join('｜')}</div>`;
-    return `<div class="q"><span class="yr" style="background:${col}">${q.year} 年 ${kind}</span><span class="qid">${esc(q.qid)}</span>
+    return `<div class="q"><span class="yr">${q.year} 年</span><span class="qid">${esc(q.qid)} · ${kind}</span>
       <div class="stem">${esc(q.stem)}</div>${ex}</div>`;
   }).join('')||'<p style="color:#86868b">（無資料）</p>';
   $('#scrim').classList.add('on');$('#drawer').classList.add('on');
@@ -276,9 +275,8 @@ def render(data: dict) -> str:
                        (s["uncovered"], "未命中"), (s["total_q"], "題")]
     )
     legend = (
-        '<div class="legend"><span><span class="d" style="background:#5aa6f0"></span>藍＝該年選擇題</span>'
-        '<span><span class="d" style="background:#fb8c00"></span>橘＝該年有申論題</span>'
-        '<span>顏色越深＝年份越近 · ×N＝該年題數 · 點圈看原題</span></div>'
+        '<div class="legend"><span>圈內＝民國年 · 顏色越深＝年份越近 · '
+        '×N＝該年題數 · 點圈看該年原題</span></div>'
     )
     return (
         '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">'
