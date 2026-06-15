@@ -123,6 +123,14 @@ def practice_by_topic(topic_point: str, topic_subject: str | None = None,
 
 
 @mcp.tool()
+def essay_exam_by_topic(topic_point: str | None = None, topic_subject: str | None = None,
+                        show_answer: bool = True) -> dict:
+    """考點申論題卷（模擬考）：把某考點或某子科目的所有申論題一次考出來，預設直接附 AI 擬答。
+    topic_point 或 topic_subject 至少給一個；show_answer=False 可先自己作答再看擬答。"""
+    return practice.essay_exam_by_topic(get_conn(), topic_point, topic_subject, show_answer)
+
+
+@mcp.tool()
 def record_answer(qid: str, answer: str | None = None,
                   self_correct: bool | None = None) -> dict:
     """記錄一次作答並自動批改＋更新間隔重複排程。MCQ 自動對答案；申論可傳 self_correct 自評。"""

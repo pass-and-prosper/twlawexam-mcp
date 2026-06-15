@@ -261,6 +261,30 @@ def random_practice_by_topic(conn, topic_point, topic_subject=None, q_type=None,
     return pool[:n]
 
 
+def essay_exam_by_topic(conn, topic_point=None, topic_subject=None) -> list[Question]:
+    """Return ALL essay (申論) questions for a 考點 or 子科目, in stable exam order.
+
+    Unlike random_practice_by_topic, this draws the COMPLETE set — no random
+    sampling, no n cap — so the user can sit a whole topic's essays in one go
+    ("一次考出來"). At least one of topic_point / topic_subject must be given.
+    Ordered newest year first for a consistent paper layout.
+    """
+    if not topic_point and not topic_subject:
+        raise ValueError("essay_exam_by_topic requires topic_point or topic_subject")
+    _SQL: dict[tuple[bool, bool], str] = {
+        (True,  False): ("SELECT * FROM questions WHERE q_type='essay' AND topic_point=? "
+                         "ORDER BY year DESC, subject, q_no"),
+        (True,  True ): ("SELECT * FROM questions WHERE q_type='essay' AND topic_point=? AND topic_subject=? "
+                         "ORDER BY year DESC, subject, q_no"),
+        (False, True ): ("SELECT * FROM questions WHERE q_type='essay' AND topic_subject=? "
+                         "ORDER BY year DESC, subject, q_no"),
+    }
+    key = (topic_point is not None, topic_subject is not None)
+    params = [v for v in (topic_point, topic_subject) if v is not None]
+    rows = conn.execute(_SQL[key], params).fetchall()
+    return [_row_to_question(r) for r in rows]
+
+
 def topic_distribution(conn, q_type=None, exam_code=None) -> list[tuple]:
     """Return (topic_subject, topic_point, count) rows, most-frequent first."""
     _SQL: dict[tuple[bool, bool], str] = {
