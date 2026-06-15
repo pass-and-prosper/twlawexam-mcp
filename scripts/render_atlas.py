@@ -291,7 +291,7 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .hidden{display:none;}
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:.2s;z-index:20;}
 .scrim.on{opacity:1;pointer-events:auto;}
-.drawer{position:fixed;top:0;right:0;height:100%;width:min(95vw,max(78vw,720px));background:var(--card);z-index:21;
+.drawer{position:fixed;top:0;right:0;height:100%;width:100vw;background:var(--card);z-index:21;
  transform:translateX(100%);transition:transform .24s cubic-bezier(.4,0,.2,1);box-shadow:-8px 0 40px rgba(0,0,0,.18);display:flex;flex-direction:column;}
 .drawer.on{transform:translateX(0);}
 .drawer header{padding:20px 28px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:flex-start;}
