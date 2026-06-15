@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 """Unified interactive 考點地圖 (一試選擇 + 二試申論) → self-contained HTML.
 
-By 科目. 選擇題 shown at topic_point level (with 未考過 markers), 申論題 at
-canonical 爭點 level (recurring 爭點 first). Click any 考點/爭點 → a drawer lists
-the original past questions (year + stem, and 學說/實務 for essays).
+By 科目. Each 考點 / 爭點 shows a row of YEAR CIRCLES — one circle per 民國 year
+it was tested, the year printed inside, ×N if several that year, recent years
+darker. Click a year-circle → a drawer lists that year's original questions
+(stem, and 學說/實務 for essays). 未考過 考點 are flagged.
 
 Usage:  python scripts/render_atlas.py [out.html]   # default topic-atlas.html
 """
 from __future__ import annotations
-import html
 import json
 import sys
 from pathlib import Path
@@ -18,16 +18,14 @@ from twexam_mcp.tools.exam_map import _SL1_MAP, _SL2_MAP, _all_syllabus_topics
 
 
 def assemble(conn) -> dict:
-    # 選擇題 questions grouped by topic_point
-    mcq_by_topic: dict[str, list] = {}
+    mcq: dict[str, dict] = {}      # topic_point -> {year: [q]}
     for qid, year, stem, tp in conn.execute(
         "SELECT qid, year, stem, topic_point FROM questions "
         "WHERE q_type='mcq' AND topic_point IS NOT NULL"
     ):
-        mcq_by_topic.setdefault(tp, []).append({"qid": qid, "year": year, "stem": stem})
+        mcq.setdefault(tp, {}).setdefault(year, []).append({"qid": qid, "year": year, "stem": stem})
 
-    # 申論 essays grouped by canonical 爭點
-    ess_by_canon: dict[str, list] = {}
+    ess: dict[str, dict] = {}      # canonical 爭點 -> {year: [q]}
     canon_subject: dict[str, str] = {}
     for qid, year, stem, issue, canon, doc, prac, ts in conn.execute(
         """SELECT e.qid, q.year, q.stem, e.issue, COALESCE(c.canonical, e.issue),
@@ -35,53 +33,46 @@ def assemble(conn) -> dict:
            FROM essay_issues e JOIN questions q ON q.qid=e.qid
            LEFT JOIN issue_canon c ON c.issue=e.issue"""
     ):
-        ess_by_canon.setdefault(canon, []).append(
+        ess.setdefault(canon, {}).setdefault(year, []).append(
             {"qid": qid, "year": year, "stem": stem,
              "doctrines": json.loads(doc), "practice": json.loads(prac), "issue": issue})
         canon_subject[canon] = ts
 
-    detail: dict[str, list] = {}
+    detail: dict[str, dict] = {}
 
-    # 一試: syllabus 科目 → 子科目 → topic_point
+    def entry(idd: str, label: str, by_year: dict) -> dict:
+        detail[idd] = {str(y): by_year[y] for y in by_year}
+        years = [{"year": y, "count": len(by_year[y])} for y in sorted(by_year)]
+        total = sum(len(v) for v in by_year.values())
+        return {"id": idd, "label": label, "years": years, "total": total, "examined": total > 0}
+
     sl1 = []
     for it in _SL1_MAP:
-        groups = []
-        for ss in it["sub_subjects"]:
-            topics = []
-            for t in ss["topics"]:
-                qs = sorted(mcq_by_topic.get(t, []), key=lambda x: -x["year"])
-                idd = "m:" + t
-                detail[idd] = qs
-                topics.append({"id": idd, "label": t, "count": len(qs), "examined": bool(qs)})
-            groups.append({"name": ss["name"], "topics": topics})
+        groups = [{"name": ss["name"], "topics": [entry("m:" + t, t, mcq.get(t, {})) for t in ss["topics"]]}
+                  for ss in it["sub_subjects"]]
         sl1.append({"subject": it["subject"], "groups": groups})
 
-    # 二試: 科目 → canonical 爭點 (recurring first)
     by_subject: dict[str, list] = {}
-    for canon, qs in ess_by_canon.items():
-        by_subject.setdefault(canon_subject[canon], []).append((canon, qs))
-    # keep 科目 order as in _SL2_MAP, then any extras
+    for canon, by_year in ess.items():
+        by_subject.setdefault(canon_subject[canon], []).append((canon, by_year))
     order = [it["subject"] for it in _SL2_MAP]
     subj_keys = sorted(by_subject, key=lambda s: (order.index(s) if s in order else 99, s))
     sl2 = []
     for ts in subj_keys:
         issues = []
-        for canon, qs in by_subject[ts]:
-            idd = "e:" + canon
-            detail[idd] = sorted(qs, key=lambda x: -x["year"])
-            n = len({q["qid"] for q in qs})
-            issues.append({"id": idd, "label": canon, "count": n, "recurring": n >= 2})
-        issues.sort(key=lambda x: (-x["count"], x["label"]))
+        for canon, by_year in by_subject[ts]:
+            e = entry("e:" + canon, canon, by_year)
+            e["recurring"] = e["total"] >= 2
+            issues.append(e)
+        issues.sort(key=lambda x: (-x["total"], x["label"]))
         sl2.append({"subject": ts, "issues": issues})
 
-    # 真正「未考過」= 該考點全題型(選擇+申論) 都 0 題
     tested = {r[0] for r in conn.execute(
         "SELECT DISTINCT topic_point FROM questions WHERE topic_point IS NOT NULL")}
     syll = _all_syllabus_topics()
     uncovered_list = sorted(t for t in syll if t not in tested)
     return {
-        "sl1": sl1, "sl2": sl2, "detail": detail,
-        "uncovered_list": uncovered_list,
+        "sl1": sl1, "sl2": sl2, "detail": detail, "uncovered_list": uncovered_list,
         "summary": {
             "mcq_topics": len(syll),
             "essay_issues": sum(len(s["issues"]) for s in sl2),
@@ -108,23 +99,24 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px 20px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
 .card h3{margin:0 0 2px;font-size:16px;font-weight:600;}
 .card .meta{font-size:12px;color:var(--muted);margin-bottom:10px;}
-.gname{font-size:12.5px;font-weight:600;color:#6e6e73;margin:12px 0 6px;}
-.row{display:flex;align-items:center;gap:10px;padding:4px 0;cursor:pointer;}
+.gname{font-size:12.5px;font-weight:600;color:#6e6e73;margin:14px 0 8px;}
+.row{display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid #f3f3f6;}
+.label{flex:0 0 240px;font-size:13.5px;cursor:pointer;line-height:1.4;}
 .row:hover .label{color:var(--blue);}
-.label{flex:0 0 auto;font-size:13.5px;min-width:0;}
-.barwrap{flex:1;height:10px;background:#f0f0f4;border-radius:6px;overflow:hidden;}
-.bar{height:100%;background:linear-gradient(90deg,#7fbef9,#0a5fc2);border-radius:6px;}
-.cnt{flex:0 0 auto;font-size:12.5px;font-weight:700;color:#3a3a3c;width:30px;text-align:right;}
-.row.recur .cnt{color:var(--blue);}
-.row.uncov{cursor:default;opacity:.85;}
-.row.uncov .pill{font-size:11px;font-weight:700;color:#fff;background:var(--orange);padding:1px 8px;border-radius:980px;}
-.row.uncov .barwrap{background:repeating-linear-gradient(90deg,#fde8cf,#fde8cf 6px,transparent 6px,transparent 12px);}
+.row.recur .label{font-weight:600;}
+.circs{display:flex;flex-wrap:wrap;gap:7px;align-items:center;}
+.circ{position:relative;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+ font-size:13px;font-weight:700;cursor:pointer;transition:transform .08s;box-shadow:0 1px 2px rgba(0,0,0,.12);}
+.circ:hover{transform:scale(1.08);}
+.circ i{position:absolute;top:-4px;right:-6px;font-style:normal;font-size:10px;font-weight:700;color:#fff;
+ background:var(--orange);border-radius:980px;padding:0 5px;line-height:15px;}
+.circ.none{width:auto;height:auto;border-radius:980px;padding:5px 12px;background:#fff;border:1.5px dashed var(--orange);
+ color:#9a5b00;font-size:12px;cursor:default;box-shadow:none;}
 .hidden{display:none;}
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:.2s;z-index:20;}
 .scrim.on{opacity:1;pointer-events:auto;}
 .drawer{position:fixed;top:0;right:0;height:100%;width:min(560px,92vw);background:var(--card);z-index:21;
- transform:translateX(100%);transition:transform .24s cubic-bezier(.4,0,.2,1);box-shadow:-8px 0 40px rgba(0,0,0,.18);
- display:flex;flex-direction:column;}
+ transform:translateX(100%);transition:transform .24s cubic-bezier(.4,0,.2,1);box-shadow:-8px 0 40px rgba(0,0,0,.18);display:flex;flex-direction:column;}
 .drawer.on{transform:translateX(0);}
 .drawer header{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:flex-start;}
 .drawer header h2{font-size:16px;margin:0;font-weight:600;line-height:1.4;flex:1;}
@@ -135,7 +127,7 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .q .qid{font-size:11.5px;color:var(--muted);}
 .q .stem{margin:8px 0 0;font-size:13.5px;line-height:1.7;white-space:pre-wrap;}
 .q .tag{font-size:11px;font-weight:600;color:#6e6e73;margin-top:8px;}
-.q .di{font-size:12.5px;line-height:1.6;color:#1d1d1f;background:#f5f5f7;border-radius:8px;padding:6px 10px;margin-top:4px;}
+.q .di{font-size:12.5px;line-height:1.6;background:#f5f5f7;border-radius:8px;padding:6px 10px;margin-top:4px;}
 .q .pr{font-size:12px;color:#0a5fc2;margin-top:4px;}
 .ucard{border:1px solid #ffe0b8;background:#fffaf3;}
 .pills{display:flex;flex-wrap:wrap;gap:7px;}
@@ -144,36 +136,42 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 
 _JS = """
 const $=s=>document.querySelector(s);
-function bars(items, max){
-  return items.map(it=>{
-    if(it.examined===false){
-      return `<div class="row uncov"><span class="label">${esc(it.label)}</span>
-        <div class="barwrap"></div><span class="pill">未考</span></div>`;
-    }
-    const w=Math.max(4, Math.round(it.count/max*100));
-    const rec=it.recurring?' recur':'';
-    return `<div class="row${rec}" data-id="${esc(it.id)}"><span class="label">${esc(it.label)}</span>
-      <div class="barwrap"><div class="bar" style="width:${w}%"></div></div><span class="cnt">${it.count}</span></div>`;
+const YRC={109:'#dcecfb',110:'#bcdcfa',111:'#94c6f6',112:'#5aa6f0',113:'#2f8be8',114:'#0a5fc2'};
+function esc(s){return (s+'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function circles(e){
+  if(!e.examined) return '<span class="circ none">未考</span>';
+  return e.years.map(y=>{
+    const fill=YRC[y.year]||'#7fbef9', dark=y.year>=112;
+    const badge=y.count>1?`<i>×${y.count}</i>`:'';
+    return `<span class="circ" data-id="${esc(e.id)}" data-year="${y.year}" title="${y.year}年 ${y.count}題"
+      style="background:${fill};color:${dark?'#fff':'#06294d'}">${y.year}${badge}</span>`;
   }).join('');
 }
-function esc(s){return (s+'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function rows(items,recur){
+  const sorted=[...items].sort((a,b)=>b.total-a.total);
+  return sorted.map(t=>`<div class="row${recur&&t.recurring?' recur':''}">
+    <span class="label" data-id="${esc(t.id)}">${esc(t.label)}</span>
+    <span class="circs">${circles(t)}</span></div>`).join('');
+}
 function renderSL1(){
   return DATA.sl1.map(sub=>{
-    const tot=sub.groups.reduce((a,g)=>a+g.topics.reduce((b,t)=>b+t.count,0),0);
-    const groups=sub.groups.map(g=>{
-      const max=Math.max(1,...g.topics.map(t=>t.count));
-      const sorted=[...g.topics].sort((a,b)=>b.count-a.count);
-      return `<div class="gname">${esc(g.name)}</div>${bars(sorted,max)}`;
-    }).join('');
-    return `<div class="card"><h3>${esc(sub.subject)}</h3><div class="meta">合計 ${tot} 題（選擇）</div>${groups}</div>`;
+    const tot=sub.groups.reduce((a,g)=>a+g.topics.reduce((b,t)=>b+t.total,0),0);
+    const gs=sub.groups.map(g=>`<div class="gname">${esc(g.name)}</div>${rows(g.topics,false)}`).join('');
+    return `<div class="card"><h3>${esc(sub.subject)}</h3><div class="meta">合計 ${tot} 題（選擇）</div>${gs}</div>`;
   }).join('');
 }
 function renderSL2(){
   return DATA.sl2.map(sub=>{
-    const tot=sub.issues.reduce((a,i)=>a+i.count,0);
-    const max=Math.max(1,...sub.issues.map(i=>i.count));
-    return `<div class="card"><h3>${esc(sub.subject)}</h3><div class="meta">${sub.issues.length} 個爭點 · ${tot} 題（申論）</div>${bars(sub.issues,max)}</div>`;
+    const tot=sub.issues.reduce((a,i)=>a+i.total,0);
+    return `<div class="card"><h3>${esc(sub.subject)}</h3>
+      <div class="meta">${sub.issues.length} 個爭點 · ${tot} 題（申論）· 反覆考者粗體</div>${rows(sub.issues,true)}</div>`;
   }).join('');
+}
+function renderUncov(){
+  const u=DATA.uncovered_list||[]; if(!u.length) return '';
+  return `<div class="card ucard"><h3>🆕 還沒考過的考點（${u.length}）</h3>
+    <div class="meta">母清單有、歷屆零題（選擇＋申論都沒考過）</div>
+    <div class="pills">${u.map(t=>`<span class="upill">${esc(t)}</span>`).join('')}</div></div>`;
 }
 function show(tab){
   $('#sl1').classList.toggle('hidden',tab!=='sl1');
@@ -181,30 +179,27 @@ function show(tab){
   $('#t1').classList.toggle('on',tab==='sl1');
   $('#t2').classList.toggle('on',tab==='sl2');
 }
-function openDrawer(id){
-  const qs=DATA.detail[id]||[];
-  const label=id.slice(2);
-  $('#dtitle').textContent=label+`（${new Set(qs.map(q=>q.qid)).size} 題）`;
+function openDrawer(id,year){
+  const by=DATA.detail[id]||{}, label=id.slice(2);
+  let qs, suffix;
+  if(year){ qs=by[year]||[]; suffix=`・${year} 年（${qs.length} 題）`; }
+  else { const ys=Object.keys(by).sort((a,b)=>b-a); qs=[].concat(...ys.map(y=>by[y]));
+         suffix=`（${qs.length} 題）`; }
+  $('#dtitle').textContent=label+suffix;
   $('#dbody').innerHTML=qs.map(q=>{
-    let extra='';
-    if(q.doctrines&&q.doctrines.length) extra+=`<div class="tag">學說</div>`+q.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
-    if(q.practice&&q.practice.length) extra+=`<div class="tag">實務</div><div class="pr">${q.practice.map(esc).join('｜')}</div>`;
+    let ex='';
+    if(q.doctrines&&q.doctrines.length) ex+=`<div class="tag">學說</div>`+q.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
+    if(q.practice&&q.practice.length) ex+=`<div class="tag">實務</div><div class="pr">${q.practice.map(esc).join('｜')}</div>`;
     return `<div class="q"><span class="yr">${q.year} 年</span><span class="qid">${esc(q.qid)}</span>
-      <div class="stem">${esc(q.stem)}</div>${extra}</div>`;
+      <div class="stem">${esc(q.stem)}</div>${ex}</div>`;
   }).join('')||'<p style="color:#86868b">（無資料）</p>';
   $('#scrim').classList.add('on');$('#drawer').classList.add('on');
 }
 function closeDrawer(){$('#scrim').classList.remove('on');$('#drawer').classList.remove('on');}
 document.addEventListener('click',e=>{
-  const row=e.target.closest('.row[data-id]'); if(row) openDrawer(row.dataset.id);
+  const c=e.target.closest('.circ[data-id]'); if(c){openDrawer(c.dataset.id,c.dataset.year);return;}
+  const l=e.target.closest('.label[data-id]'); if(l){openDrawer(l.dataset.id,null);}
 });
-function renderUncov(){
-  const u=DATA.uncovered_list||[];
-  if(!u.length) return '';
-  const pills=u.map(t=>`<span class="upill">${esc(t)}</span>`).join('');
-  return `<div class="card ucard"><h3>🆕 還沒考過的考點（${u.length}）</h3>
-    <div class="meta">母清單有、歷屆零題（選擇＋申論都沒考過）</div><div class="pills">${pills}</div></div>`;
-}
 window.addEventListener('DOMContentLoaded',()=>{
   $('#uncov').innerHTML=renderUncov();
   $('#sl1').innerHTML=renderSL1(); $('#sl2').innerHTML=renderSL2(); show('sl1');
