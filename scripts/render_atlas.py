@@ -315,12 +315,19 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .q .pr{font-size:14px;line-height:1.8;background:#e9f8f0;border-left:3px solid #1b9e57;border-radius:0 10px 10px 0;padding:10px 14px;margin:6px 0;color:#0c6b3c;}
 /* 選擇題選項：正解綠底打勾 */
 .opts{margin-top:11px;display:flex;flex-direction:column;gap:7px;}
-.opt{font-size:14px;line-height:1.7;background:#f5f5f7;border:1px solid transparent;border-radius:10px;padding:9px 13px;display:flex;gap:9px;align-items:baseline;}
+.opthint{font-size:12px;color:#86868b;margin:0 0 3px 2px;}
+.opts.answered .opthint{display:none;}
+.opt{font-size:14px;line-height:1.7;background:#f5f5f7;border:1px solid transparent;border-radius:10px;padding:9px 13px;display:flex;gap:9px;align-items:baseline;cursor:pointer;transition:background .1s;}
+.opts:not(.answered) .opt:hover{background:#e6eefb;}
+.opts.answered .opt{cursor:default;}
 .opt .ol{font-weight:800;color:#86868b;flex:0 0 auto;}
 .opt .ot{flex:1;}
 .opt.ok{background:#e9f8f0;border-color:#a5dcb9;}
 .opt.ok .ol{color:#1b9e57;}
+.opt.wrong{background:#ffeceb;border-color:#ffc4bf;}
+.opt.wrong .ol{color:#ff3b30;}
 .opt .ck{margin-left:auto;color:#1b9e57;font-weight:800;font-size:12px;flex:0 0 auto;white-space:nowrap;}
+.opt .ck.wrongck{color:#ff3b30;}
 .di .enum{color:#0a6cff;font-weight:800;}    /* 學說標號＝藍 */
 .pr .enum{color:#1b9e57;font-weight:800;}    /* 實務標號＝綠 */
 /* 題幹裡該爭點的關鍵句：紅虛線框（提醒「這裡是考點」），題幹其餘維持純黑 */
@@ -373,11 +380,10 @@ function esc(s){return (s+'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':
 function beautify(s){return s.replace(/([(（][0-9]+[)）])/g,'<b class="enum">$1</b> ');}
 // 題幹裡「該爭點觸發的關鍵句」用紅虛線框起來（focus 為精準子字串陣列）
 function markFocus(stem,focus){let h=esc(stem);(focus||[]).forEach(f=>{const ef=esc(f);if(ef)h=h.split(ef).join('<span class="focus">'+ef+'</span>');});return h;}
-// 選擇題：四選項 A/B/C/D，正解綠底打勾
+// 選擇題：先作答後揭示正解（點選作答 → ✓正解／✗你選的）
 function optionsHtml(options,correct){const L='ABCDEFGHIJ';
-  return '<div class="opts">'+options.map((o,i)=>{const lt=L[i];const ok=(lt===correct);
-    return `<div class="opt${ok?' ok':''}"><span class="ol">${lt}</span><span class="ot">${esc(o)}</span>${ok?'<span class="ck">✓ 正解</span>':''}</div>`;
-  }).join('')+'</div>';}
+  const opts=options.map((o,i)=>`<div class="opt" data-letter="${L[i]}"><span class="ol">${L[i]}</span><span class="ot">${esc(o)}</span></div>`).join('');
+  return `<div class="opts" data-correct="${esc(correct)}"><div class="opthint">👆 點選作答，再顯示正解</div>${opts}</div>`;}
 function srcMeta(s){
   if(s==='高普考領先') return {b:'📈 高普考', c:'gk', bg:'#0a7d3c'};
   if(s==='法律系考古題') return {b:'🎓 法律系', c:'ls', bg:'#7a4ad0'};
@@ -486,6 +492,14 @@ function openDrawer(id,year){
 }
 function closeDrawer(){$('#scrim').classList.remove('on');$('#drawer').classList.remove('on');}
 document.addEventListener('click',e=>{
+  const op=e.target.closest('.opt');  // 選擇題作答：先選才揭示正解
+  if(op){const box=op.closest('.opts');
+    if(box&&!box.classList.contains('answered')){
+      const correct=box.dataset.correct; box.classList.add('answered');
+      box.querySelectorAll('.opt').forEach(o=>{if(o.dataset.letter===correct){o.classList.add('ok');o.insertAdjacentHTML('beforeend','<span class="ck">✓ 正解</span>');}});
+      if(op.dataset.letter!==correct){op.classList.add('wrong');op.insertAdjacentHTML('beforeend','<span class="ck wrongck">✗ 你選的</span>');}
+    }
+    return;}
   const b=e.target.closest('.sbtn'); if(b){selectSubject(b.dataset.tab, b.dataset.i==='uncov'?'uncov':+b.dataset.i);return;}
   const c=e.target.closest('.circ[data-id]'); if(c){openDrawer(c.dataset.id,c.dataset.year);return;}
   const l=e.target.closest('.label[data-id]'); if(l){openDrawer(l.dataset.id,null);}
