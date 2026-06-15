@@ -171,6 +171,78 @@ def get_topic_distribution(conn: sqlite3.Connection, q_type: str | None = None,
     return [{"topic_subject": r[0], "topic_point": r[1], "count": r[2]} for r in rows]
 
 
+def _all_syllabus_topics() -> list[str]:
+    """De-duplicated list of every 考點 in the syllabus (母清單), sl1 + sl2."""
+    seen: dict[str, None] = {}  # preserve first-seen order, dedup (e.g. 既判力 in both)
+    for it in _SL1_MAP:
+        for ss in it["sub_subjects"]:
+            for t in ss["topics"]:
+                seen.setdefault(t, None)
+    for it in _SL2_MAP:
+        for t in it["topics"]:
+            seen.setdefault(t, None)
+    return list(seen)
+
+
+def build_topic_atlas(conn: sqlite3.Connection) -> dict:
+    """Unified 考點 atlas across BOTH 一試(選擇) and 二試(申論).
+
+    For every syllabus 考點 attach its bank stats: combined MCQ+essay count,
+    the per-type breakdown, the most recent exam year it appeared, and an
+    `examined` flag (False = 還沒考過). The syllabus is the master list, so a
+    考點 with zero questions is a genuine never-tested topic (verified: the
+    classification reuses syllabus vocabulary, 0 orphans).
+
+    Returns {"sections": [sl1, sl2], "summary": {...}} — a hierarchy ready to
+    render as a heat-map (科目 → 子科目 → 考點).
+    """
+    # Per-考點 global stats (merged across q_type and across sl1/sl2 placements).
+    stats: dict[str, dict] = {}
+    for tp, qt, n, last in conn.execute(
+        "SELECT topic_point, q_type, COUNT(*), MAX(year) FROM questions "
+        "WHERE topic_point IS NOT NULL GROUP BY topic_point, q_type"
+    ):
+        d = stats.setdefault(tp, {"mcq": 0, "essay": 0, "last_year": None})
+        d[qt] = n
+        if last is not None and (d["last_year"] is None or last > d["last_year"]):
+            d["last_year"] = last
+
+    def entry(name: str) -> dict:
+        d = stats.get(name, {"mcq": 0, "essay": 0, "last_year": None})
+        total = d.get("mcq", 0) + d.get("essay", 0)
+        return {"topic": name, "mcq": d.get("mcq", 0), "essay": d.get("essay", 0),
+                "total": total, "last_year": d.get("last_year"), "examined": total > 0}
+
+    sl1 = {"trial": "sl1", "label": "一試（選擇題）", "subjects": []}
+    for it in _SL1_MAP:
+        sl1["subjects"].append({
+            "subject": it["subject"],
+            "groups": [{"name": ss["name"], "topics": [entry(t) for t in ss["topics"]]}
+                       for ss in it["sub_subjects"]],
+        })
+    sl2 = {"trial": "sl2", "label": "二試（申論題）", "subjects": []}
+    for it in _SL2_MAP:
+        sl2["subjects"].append({
+            "subject": it["subject"],
+            "groups": [{"name": None, "topics": [entry(t) for t in it["topics"]]}],
+        })
+
+    all_entries = [entry(t) for t in _all_syllabus_topics()]
+    uncovered = sorted((e["topic"] for e in all_entries if not e["examined"]))
+    hottest = sorted(all_entries, key=lambda e: -e["total"])[:10]
+    return {
+        "sections": [sl1, sl2],
+        "summary": {
+            "total_topics": len(all_entries),
+            "examined": sum(1 for e in all_entries if e["examined"]),
+            "uncovered_count": len(uncovered),
+            "uncovered": uncovered,
+            "hottest": [{"topic": e["topic"], "total": e["total"]} for e in hottest],
+            "total_questions": conn.execute("SELECT COUNT(*) FROM questions").fetchone()[0],
+        },
+    }
+
+
 def get_exam_map(conn: sqlite3.Connection, trial: str | None = None) -> dict:
     """
     回傳考試科目考點地圖。
