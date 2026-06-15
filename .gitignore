@@ -29,3 +29,7 @@ twexam_mcp/data/*.userbak
 
 # generated 考點地圖 (derived from the bank; regenerate via scripts/render_topic_atlas.py)
 topic-atlas.html
+
+# 月度刷新本機狀態(每台機器各自)
+.refresh_state.json
+_pending_refresh.md
