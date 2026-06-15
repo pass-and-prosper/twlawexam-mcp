@@ -107,7 +107,8 @@ def assemble(conn) -> dict:
             uid = f"u:{ts}:{j}"
             detail[uid] = [{"untested": True, "issue": u["issue"], "why": u.get("why", ""),
                             "doctrines": u.get("doctrines", []), "practice": u.get("practice", []),
-                            "source": u.get("source", ""), "gk_source": u.get("gk_source", "")}]
+                            "source": u.get("source", ""), "gk_source": u.get("gk_source", ""),
+                            "ls_source": u.get("ls_source", "")}]
             uts.append({"id": uid, "label": u["issue"], "source": u.get("source", "")})
         n_untested += len(uts)
         sl2.append({"subject": ts, "issues": issues, "untested": uts})
@@ -208,6 +209,7 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .circ.pred{width:auto;height:auto;border-radius:980px;padding:5px 12px;background:#f3eeff;border:1.5px solid #cdbcff;
  color:#6a3df0;font-size:12px;box-shadow:none;}
 .circ.pred.gk{background:#e6f6ec;border-color:#a5dcb9;color:#0a7d3c;}
+.circ.pred.ls{background:#f0eafc;border-color:#cbb6ee;color:#7a4ad0;}
 .row.ut .label{color:#4a3a8c;}
 .row.ut:hover .label{color:#6a3df0;}
 """
@@ -216,6 +218,11 @@ _JS = """
 const $=s=>document.querySelector(s);
 const BLUE={109:'#dcecfb',110:'#bcdcfa',111:'#94c6f6',112:'#5aa6f0',113:'#2f8be8',114:'#0a5fc2'};
 function esc(s){return (s+'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function srcMeta(s){
+  if(s==='高普考領先') return {b:'📈 高普考', c:'gk', bg:'#0a7d3c'};
+  if(s==='法律系考古題') return {b:'🎓 法律系', c:'ls', bg:'#7a4ad0'};
+  return {b:'🔮 推測', c:'', bg:'#7b5cff'};
+}
 function circles(e){
   if(!e.examined) return '<span class="circ none">未考</span>';
   return e.years.map(y=>{
@@ -225,8 +232,9 @@ function circles(e){
       style="background:${fill};color:${y.year>=112?'#fff':'#06294d'}">${y.year}${badge}</span>`;
   }).join('');
 }
+function latestYr(t){return t.years&&t.years.length?Math.max(...t.years.map(y=>y.year)):0;}
 function rows(items,recur){
-  const sorted=[...items].sort((a,b)=>b.total-a.total);
+  const sorted=[...items].sort((a,b)=>latestYr(b)-latestYr(a)||b.total-a.total);
   return sorted.map(t=>`<div class="row${recur&&t.recurring?' recur':''}">
     <span class="label" data-id="${esc(t.id)}">${esc(t.label)}</span>
     <span class="circs">${circles(t)}</span></div>`).join('');
@@ -238,14 +246,15 @@ function subjectCard(tab,sub){
     return `<div class="card"><h3>${esc(sub.subject)}</h3><div class="meta">合計 ${tot} 題（選擇＋同考點申論）</div>${gs}</div>`;
   }
   const tot=sub.issues.reduce((a,i)=>a+i.total,0);
-  const ut=[...(sub.untested||[])].sort((a,b)=>(a.source==='高普考領先'?0:1)-(b.source==='高普考領先'?0:1));
+  const rank=s=>s==='高普考領先'?0:s==='法律系考古題'?1:2;
+  const ut=[...(sub.untested||[])].sort((a,b)=>rank(a.source)-rank(b.source));
   const utRows=ut.map(u=>{
-    const gk=u.source==='高普考領先';
+    const m=srcMeta(u.source);
     return `<div class="row ut"><span class="label" data-id="${esc(u.id)}">${esc(u.label)}</span>
-      <span class="circs"><span class="circ pred${gk?' gk':''}">${gk?'📈 高普考':'🔮 推測'}</span></span></div>`;
+      <span class="circs"><span class="circ pred ${m.c}">${m.b}</span></span></div>`;
   }).join('');
-  const nGk=ut.filter(u=>u.source==='高普考領先').length;
-  const utSec=ut.length?`<div class="gname pred">🔮 還沒考過的重要爭點（${ut.length}：研究推測${ut.length-nGk}＋📈高普考領先${nGk}，字號已驗）—— 點看學說/實務/為何可能考</div>${utRows}`:'';
+  const cnt=s=>ut.filter(u=>u.source===s).length;
+  const utSec=ut.length?`<div class="gname pred">🔮 還沒考過的重要爭點（${ut.length}：🔮研究${cnt('研究推測')}＋📈高普考${cnt('高普考領先')}＋🎓法律系${cnt('法律系考古題')}，字號已驗）—— 點看學說/實務/為何可能考</div>${utRows}`:'';
   return `<div class="card"><h3>${esc(sub.subject)}</h3>
     <div class="meta">${sub.issues.length} 個已考爭點 · ${tot} 題（申論）· 反覆考者粗體</div>${rows(sub.issues,true)}${utSec}</div>`;
 }
@@ -282,10 +291,11 @@ function openDrawer(id,year){
     if(q.doctrines&&q.doctrines.length) ex+=`<div class="tag">學說</div>`+q.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
     if(q.practice&&q.practice.length) ex+=`<div class="tag">實務</div><div class="pr">${q.practice.map(esc).join('｜')}</div>`;
     if(q.untested){
-      const gk=q.source==='高普考領先';
-      const badge=gk?('📈 高普考領先'+(q.gk_source?'（'+esc(q.gk_source)+'）':'')):'🔮 研究推測';
+      const m=srcMeta(q.source);
+      const extra=q.gk_source||q.ls_source||'';
+      const badge=m.b+(extra?'（'+esc(extra)+'）':'');
       const why=q.why?`<div class="tag">為何可能考</div><div class="di" style="background:#f3eeff">${esc(q.why)}</div>`:'';
-      return `<div class="q"><span class="yr" style="background:${gk?'#0a7d3c':'#7b5cff'}">${badge}</span>
+      return `<div class="q"><span class="yr" style="background:${m.bg}">${badge}</span>
         <div class="stem" style="font-weight:600;margin-top:6px">${esc(q.issue||'')}</div>${ex}${why}</div>`;
     }
     const kind=q.essay?'申論':'選擇';
