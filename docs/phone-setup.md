@@ -1,6 +1,6 @@
 # 手機連線設定（家用 PC + Cloudflare Tunnel）
 
-讓手機 Claude App 用到電腦上的 twexam 題庫。資料留在你電腦（`local` 的 DB 不搬家），免費。
+讓手機 Claude App 用到電腦上的 twexam 題庫。資料留在你本機（DB 不上雲），免費。
 **代價**：電腦要開著、通道要跑著，手機才連得到。
 
 前提：**Claude 付費方案（Pro 或 Max）** 才有「自訂連接器」。沒有就只能桌機用。
@@ -20,8 +20,9 @@
 ## 每次要用（兩個視窗）
 
 ### 視窗 1：啟動題庫伺服器
+先 `cd` 進專案資料夾，再執行：
 ```powershell
-powershell -File twexam-mcp\scripts\serve_phone.ps1
+powershell -File scripts\serve_phone.ps1
 ```
 它會印出你的**連線密碼**（第一次自動產生、之後固定），並在 `127.0.0.1:8000` 開伺服器。
 把那串密碼記下來（手機設定要用）。
@@ -52,5 +53,5 @@ cloudflared tunnel --url http://127.0.0.1:8000 --http-host-header 127.0.0.1:8000
 
 - **quick tunnel 網址每次重啟會變**。要永久固定網址 → 設 named tunnel（需 Cloudflare 免費帳號 + 一個網域）。要的話跟我說，我給你 named tunnel 的設定。
 - **電腦關機 / 通道關掉 → 手機連不到**（這是「資料留在自己電腦」的取捨）。想永遠在線就得改用雲端 VM。
-- 密碼存在 `twexam-mcp\.twexam_token`（已 gitignore，不會進版控）。密碼外洩就刪掉這檔、重跑 `serve_phone.ps1` 產新的。
+- 密碼存在專案資料夾根目錄的 `.twexam_token`（已 gitignore，不會進版控）。密碼外洩就刪掉這檔、重跑 `serve_phone.ps1` 產新的。
 - 安全性：伺服器對外只開一條，且**沒帶對密碼一律 401**；但 quick tunnel 網址是公開可達的，所以**密碼要夠長、別外流**。

@@ -1,7 +1,8 @@
 # serve_phone.ps1 — 啟動 twexam 題庫 MCP 的 HTTP 模式（給手機透過 Cloudflare Tunnel 連線）
 # 用法：右鍵以 PowerShell 執行，或 `powershell -File scripts\serve_phone.ps1`
 $ErrorActionPreference = "Stop"
-$proj = "twexam-mcp"
+# 自動定位專案根目錄（本檔在 <proj>\scripts\ 底下），不寫死磁碟路徑，搬到任何位置都能跑
+$proj = Split-Path -Parent $PSScriptRoot
 $tokenFile = Join-Path $proj ".twexam_token"
 
 # 穩定密碼：第一次產生後存檔，之後重啟都用同一把（手機連接器才不用一直改）
