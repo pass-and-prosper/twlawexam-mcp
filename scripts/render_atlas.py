@@ -199,7 +199,7 @@ def assemble(conn) -> dict:
             detail[uid] = [{"untested": True, "issue": u["issue"], "why": u.get("why", ""),
                             "doctrines": u.get("doctrines", []), "practice": u.get("practice", []),
                             "source": u.get("source", ""), "gk_source": u.get("gk_source", ""),
-                            "ls_source": u.get("ls_source", "")}]
+                            "ls_source": u.get("ls_source", ""), "journal_source": u.get("journal_source", "")}]
             uts.append({"id": uid, "label": u["issue"], "source": u.get("source", "")})
         n_untested += len(uts)
         sl2.append({"subject": ts, "issues": issues, "untested": uts})
@@ -296,9 +296,11 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .q .yr{display:inline-block;font-size:13px;font-weight:700;color:#fff;background:var(--blue);padding:3px 11px;border-radius:980px;margin-right:9px;}
 .q .qid{font-size:12.5px;color:var(--muted);}
 .q .stem{margin:11px 0 0;font-size:15.5px;line-height:1.9;white-space:pre-wrap;}
-.q .tag{font-size:12.5px;font-weight:700;color:#6e6e73;margin-top:14px;letter-spacing:.02em;}
-.q .di{font-size:14.5px;line-height:1.85;background:#f5f5f7;border-radius:10px;padding:10px 14px;margin:6px 0;}
-.q .pr{font-size:14px;line-height:1.75;color:#0a5fc2;margin-top:5px;}
+.q .tag{font-size:12.5px;font-weight:800;color:#6e6e73;margin-top:14px;letter-spacing:.02em;}
+.q .tag.doc-t{color:#0a6cff;}      /* 學說＝藍 */
+.q .tag.prac-t{color:#1b9e57;}     /* 實務＝綠 */
+.q .di{font-size:14.5px;line-height:1.85;background:#eef4ff;border-left:3px solid #0a6cff;border-radius:0 10px 10px 0;padding:10px 14px;margin:6px 0;}
+.q .pr{font-size:14px;line-height:1.8;background:#e9f8f0;border-left:3px solid #1b9e57;border-radius:0 10px 10px 0;padding:10px 14px;margin:6px 0;color:#0c6b3c;}
 .ucard{border:1px solid #ffe0b8;background:#fffaf3;}
 .pills{display:flex;flex-wrap:wrap;gap:7px;}
 .upill{font-size:13px;padding:5px 11px;border-radius:980px;background:#fff;border:1.5px dashed var(--orange);color:#9a5b00;font-weight:500;}
@@ -306,6 +308,7 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .circ.pred{width:auto;height:auto;border-radius:980px;padding:5px 12px;background:#f3eeff;border:1.5px solid #cdbcff;
  color:#6a3df0;font-size:12px;box-shadow:none;}
 .circ.pred.gk{background:#e6f6ec;border-color:#a5dcb9;color:#0a7d3c;}
+.circ.pred.jr{background:#fcefe2;border-color:#f0c79e;color:#b8500a;}
 .circ.pred.ls{background:#f0eafc;border-color:#cbb6ee;color:#7a4ad0;}
 .row.ut .label{color:#4a3a8c;}
 .row.ut:hover .label{color:#6a3df0;}
@@ -335,6 +338,7 @@ function esc(s){return (s+'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':
 function srcMeta(s){
   if(s==='高普考領先') return {b:'📈 高普考', c:'gk', bg:'#0a7d3c'};
   if(s==='法律系考古題') return {b:'🎓 法律系', c:'ls', bg:'#7a4ad0'};
+  if(s==='期刊論文') return {b:'📚 期刊', c:'jr', bg:'#b8500a'};
   return {b:'🔮 推測', c:'', bg:'#7b5cff'};
 }
 function circles(e){
@@ -360,7 +364,7 @@ function subjectCard(tab,sub){
     return `<div class="card"><h3>${esc(sub.subject)}</h3><div class="meta">合計 ${tot} 題（選擇＋同考點申論）</div>${gs}</div>`;
   }
   const tot=sub.issues.reduce((a,i)=>a+i.total,0);
-  const rank=s=>s==='高普考領先'?0:s==='法律系考古題'?1:2;
+  const rank=s=>s==='高普考領先'?0:s==='法律系考古題'?1:s==='期刊論文'?2:3;
   const ut=[...(sub.untested||[])].sort((a,b)=>rank(a.source)-rank(b.source));
   const utRows=ut.map(u=>{
     const m=srcMeta(u.source);
@@ -368,7 +372,7 @@ function subjectCard(tab,sub){
       <span class="circs"><span class="circ pred ${m.c}">${m.b}</span></span></div>`;
   }).join('');
   const cnt=s=>ut.filter(u=>u.source===s).length;
-  const utSec=ut.length?`<div class="gname pred">🔮 還沒考過的重要爭點（${ut.length}：🔮研究${cnt('研究推測')}＋📈高普考${cnt('高普考領先')}＋🎓法律系${cnt('法律系考古題')}，字號已驗）—— 點看學說/實務/為何可能考</div>${utRows}`:'';
+  const utSec=ut.length?`<div class="gname pred">🔮 還沒考過的重要爭點（${ut.length}：🔮研究${cnt('研究推測')}＋📈高普考${cnt('高普考領先')}＋🎓法律系${cnt('法律系考古題')}＋📚期刊${cnt('期刊論文')}，字號已驗）—— 點看學說/實務/為何可能考</div>${utRows}`:'';
   return `<div class="card"><h3>${esc(sub.subject)}</h3>
     <div class="meta">${sub.issues.length} 個已考爭點 · ${tot} 題（申論）· 反覆考者粗體</div>${rows(sub.issues,true)}${utSec}</div>`;
 }
@@ -409,7 +413,7 @@ function openDrawer(id,year){
     }
     if(q.untested){
       const m=srcMeta(q.source);
-      const extra=q.gk_source||q.ls_source||'';
+      const extra=q.gk_source||q.ls_source||q.journal_source||'';
       const badge=m.b+(extra?'（'+esc(extra)+'）':'');
       const why=q.why?`<div class="tag">為何可能考</div><div class="di" style="background:#f3eeff">${esc(q.why)}</div>`:'';
       return `<div class="q"><span class="yr" style="background:${m.bg}">${badge}</span>
