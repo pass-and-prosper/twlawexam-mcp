@@ -1,0 +1,45 @@
+#!/bin/sh
+# pre-push privacy / identity gate (twexam-mcp).
+# Blocks pushing ANYTHING that can trace back to the author — per the user's
+# highest-priority rule. Scans every commit about to be pushed: author/committer
+# email, commit messages, and added diff lines.
+#
+# Install:  cp scripts/git-hooks/pre-push .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+# Bypass (NOT recommended): git push --no-verify
+ALLOWED_EMAIL="pass-and-prosper@users.noreply.github.com"
+ZERO="0000000000000000000000000000000000000000"
+rc=0
+emit() { echo "🛑 pre-push BLOCKED: $1" >&2; rc=1; }
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$ZERO" ] && continue            # branch deletion
+  case "$remote_sha" in
+    *[!0]*) range="$remote_sha..$local_sha" ;;       # remote exists -> only new commits
+    *)      range="$local_sha" ;;                     # new ref -> scan all reachable
+  esac
+
+  # 1) every author/committer email must be the anonymized noreply
+  bademail=$(git log --format='%ae%n%ce' "$range" 2>/dev/null | sort -u | grep -v "^${ALLOWED_EMAIL}$")
+  [ -n "$bademail" ] && emit "non-anonymized commit email: $(echo "$bademail" | tr '\n' ' ')"
+
+  # 2) identity markers in commit messages + diffs (old handle, AI signature, foreign noreply)
+  hits=$(git log -p "$range" 2>/dev/null \
+           | grep -niE 'jc0459|Co-Authored-By|@users\.noreply\.github\.com|anthropic\.com' \
+           | grep -viE "${ALLOWED_EMAIL}" | head -3)
+  [ -n "$hits" ] && emit "identity marker (jc0459 / Co-Authored-By / foreign noreply) found:
+$hits"
+
+  # 3) private network / key material in ADDED lines
+  sec=$(git log -p "$range" 2>/dev/null | grep -E '^\+' \
+          | grep -nE '192\.168\.[0-9]+\.|10\.[0-9]+\.[0-9]+\.[0-9]+|BEGIN [A-Z ]*PRIVATE KEY' \
+          | head -3)
+  [ -n "$sec" ] && emit "private IP / key material in added lines:
+$sec"
+done
+
+if [ "$rc" -ne 0 ]; then
+  echo "" >&2
+  echo "Push aborted by the privacy gate. Clean the above first." >&2
+  echo "(Override ONCE only if you are certain: git push --no-verify)" >&2
+fi
+exit $rc
