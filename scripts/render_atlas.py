@@ -421,16 +421,17 @@ function openDrawer(id,year){
     return `<div class="q"><span class="yr">${q.year} 年</span><span class="qid">${esc(q.qid)} · ${kind}</span>
       <div class="stem">${esc(q.stem)}</div>${ans}${ex}</div>`;
   }).join('')||'<p style="color:#86868b">（無資料）</p>';
-  // tested 爭點：enrich 後的學說(含學者)/實務(具體字號) 放最上面，統一顯示一次
+  // tested 爭點：enrich 後的學說(含學者)/實務(具體字號)，放在題目下方統一顯示一次
   let enh='';
   if(en){
     if(en.doctrines&&en.doctrines.length) enh+=`<div class="tag">學說（含學者／標準說）</div>`+en.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
     if(en.practice&&en.practice.length) enh+=`<div class="tag">實務（字號·已驗）</div><div class="pr">${en.practice.map(esc).join('｜')}</div>`;
     if(enh) enh=`<div class="q" style="border-bottom:2px solid var(--line)">${enh}</div>`;
   }
-  // 考點重點(primer)：放在題目清單下方，全年份/單年都顯示
+  // 考點重點(primer)：放在最下方，全年份/單年都顯示
   const prim=(DATA.primers&&DATA.primers[id])?`<div class="primer"><div class="ptag">◆ 考點重點 ◆</div><div class="md">${DATA.primers[id]}</div></div>`:'';
-  $('#dbody').innerHTML=enh+qhtml+prim;
+  // 題目最上方 → 學說/實務(enrich) → 考點重點
+  $('#dbody').innerHTML=qhtml+enh+prim;
   $('#scrim').classList.add('on');$('#drawer').classList.add('on');
 }
 function closeDrawer(){$('#scrim').classList.remove('on');$('#drawer').classList.remove('on');}
