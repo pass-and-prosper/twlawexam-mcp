@@ -10,12 +10,81 @@ questions (stem, and 學說/實務 for essays). 未考過 是用內容關鍵字�
 Usage:  python scripts/render_atlas.py [out.html]   # default topic-atlas.html
 """
 from __future__ import annotations
+import html
 import json
+import re
 import sys
 from pathlib import Path
 
 from twexam_mcp.cache import db
 from twexam_mcp.tools.exam_map import _SL1_MAP, _SL2_MAP, _all_syllabus_topics
+
+
+# ── 手寫 markdown → 安全 HTML（考點重點 / 擬答用；不依賴外部套件）─────────────
+_MD_BOLD = re.compile(r"\*\*(.+?)\*\*")
+_MD_CODE = re.compile(r"`([^`]+)`")
+_MD_LIST = re.compile(r"^(\s*)([-*]|\d+\.)\s+(.*)$")
+
+
+def _md_inline(text: str) -> str:
+    # 先 escape（安全紅線：使用者內容裡的尖角括號不可變裸標籤），再上行內標記
+    t = html.escape(text, quote=False)
+    t = _MD_CODE.sub(lambda m: f"<code>{m.group(1)}</code>", t)
+    t = _MD_BOLD.sub(lambda m: f"<strong>{m.group(1)}</strong>", t)
+    return t
+
+
+def _md_list(items: list[tuple[int, bool, str]], idx: int, base: int) -> tuple[str, int]:
+    """items=(indent, ordered, text)；依縮排把較深的項目巢狀進上一個 <li>。"""
+    tag = "ol" if items[idx][1] else "ul"
+    parts = [f"<{tag}>"]
+    while idx < len(items):
+        indent, _ordered, text = items[idx]
+        if indent < base:
+            break
+        li = f"<li>{_md_inline(text)}"
+        idx += 1
+        if idx < len(items) and items[idx][0] > base:
+            sub, idx = _md_list(items, idx, items[idx][0])
+            li += sub
+        parts.append(li + "</li>")
+    parts.append(f"</{tag}>")
+    return "".join(parts), idx
+
+
+def _md_to_html(md: str) -> str:
+    """支援的子集：## 標題、**粗體**、`行內碼`、編號/項目清單(含一層巢狀)、--- 分隔線、段落。"""
+    lines = (md or "").strip("\n").split("\n")
+    out: list[str] = []
+    para: list[str] = []
+
+    def flush():
+        if para:
+            out.append("<p>" + "<br>".join(_md_inline(x) for x in para) + "</p>")
+            para.clear()
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if not line.strip():
+            flush(); i += 1; continue
+        if re.match(r"^#{2,6}\s+", line):
+            flush(); out.append(f"<h4>{_md_inline(line.lstrip('#').strip())}</h4>"); i += 1; continue
+        if re.match(r"^-{3,}\s*$", line):
+            flush(); out.append("<hr>"); i += 1; continue
+        if _MD_LIST.match(line):
+            flush()
+            items: list[tuple[int, bool, str]] = []
+            while i < len(lines) and _MD_LIST.match(lines[i]):
+                m = _MD_LIST.match(lines[i])
+                items.append((len(m.group(1)), m.group(2).endswith("."), m.group(3)))
+                i += 1
+            out.append(_md_list(items, 0, items[0][0])[0])
+            continue
+        para.append(line.strip())
+        i += 1
+    flush()
+    return "\n".join(out)
 
 
 def assemble(conn) -> dict:
@@ -80,8 +149,14 @@ def assemble(conn) -> dict:
                   for ss in it["sub_subjects"]]
         sl1.append({"subject": it["subject"], "groups": groups})
 
-    def entry_canon(idd, label, by_year):
-        detail[idd] = {str(y): list(by_year[y].values()) for y in by_year}  # by_year[y] is {qid:entry}
+    def entry_canon(idd, label, by_year, answers=None):
+        answers = answers or {}
+        rows = {str(y): list(by_year[y].values()) for y in by_year}  # by_year[y] is {qid:entry}
+        for qs in rows.values():
+            for q in qs:
+                if q["qid"] in answers:  # 各題擬答（單年抽屜才顯示，由 JS 控制）
+                    q["answer"] = _md_to_html(answers[q["qid"]])
+        detail[idd] = rows
         years = [{"year": y, "count": len(by_year[y]), "essay": True} for y in sorted(by_year)]
         total = sum(len(v) for v in by_year.values())
         return {"id": idd, "label": label, "years": years, "total": total,
@@ -97,10 +172,21 @@ def assemble(conn) -> dict:
     upath = db.default_db_path().parent / "untested_issues.json"
     untested = json.loads(upath.read_text(encoding="utf-8")) if upath.exists() else {}
 
+    # 考點重點(primer) + 各題擬答(answers) — 依 canonical 爭點名手寫 markdown，bundled JSON
+    ppath = db.default_db_path().parent / "issue_primers.json"
+    primers_src = json.loads(ppath.read_text(encoding="utf-8")) if ppath.exists() else {}
+    primers: dict[str, str] = {}  # id('e:'+canon) -> 渲染後的重點 HTML
+
     sl2 = []
     n_untested = 0
     for ts in subj_keys:
-        issues = [entry_canon("e:" + canon, canon, by_year) for canon, by_year in by_subject[ts]]
+        issues = []
+        for canon, by_year in by_subject[ts]:
+            pid = "e:" + canon
+            pdata = primers_src.get(canon, {})
+            issues.append(entry_canon(pid, canon, by_year, pdata.get("answers")))
+            if pdata.get("primer"):
+                primers[pid] = _md_to_html(pdata["primer"])
         issues.sort(key=lambda x: (-x["total"], x["label"]))
         uts = []
         for j, u in enumerate(untested.get(ts, [])):
@@ -131,11 +217,17 @@ def assemble(conn) -> dict:
             "SELECT 1 FROM questions WHERE stem LIKE ? OR options LIKE ? OR model_answer LIKE ? LIMIT 1",
             (f"%{kw}%",) * 3).fetchone() is not None
 
+    # 國文（作文）文體（議論文/說明文/法律時事評析）是寫作類型、非實體法律考點，
+    # 題幹永遠不會出現該詞 → 一律排除出「未考過」偵測（依科目名抓，未來新增文體自動排除）
+    essay_genres = {t for it in _SL2_MAP if ("國文" in it["subject"] or "作文" in it["subject"])
+                    for t in it["topics"]}
     uncovered_list = [t for t in sorted(_all_syllabus_topics())
-                      if t not in tested and not any(_seen(k) for k in syn.get(t, [t]))]
+                      if t not in tested and t not in essay_genres
+                      and not any(_seen(k) for k in syn.get(t, [t]))]
 
     return {
         "sl1": sl1, "sl2": sl2, "detail": detail, "uncovered_list": uncovered_list,
+        "primers": primers,
         "summary": {
             "mcq_topics": len(_all_syllabus_topics()),
             "essay_issues": sum(len(s["issues"]) for s in sl2),
@@ -212,6 +304,23 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .circ.pred.ls{background:#f0eafc;border-color:#cbb6ee;color:#7a4ad0;}
 .row.ut .label{color:#4a3a8c;}
 .row.ut:hover .label{color:#6a3df0;}
+/* 擬答（單年抽屜）＋ 考點重點(primer) */
+.q .tag.ans-t{color:#0a5fc2;}
+.ans{font-size:12.5px;line-height:1.7;background:#eef6ff;border:1px solid #d4e6fb;border-left:3px solid var(--blue);
+ border-radius:8px;padding:8px 12px;margin-top:4px;}
+.primer{margin-top:22px;background:#f5f5f7;border:1px solid var(--line);border-radius:14px;padding:14px 18px;}
+.primer .ptag{font-size:12.5px;font-weight:700;color:#3a3a3c;letter-spacing:.04em;margin-bottom:8px;text-align:center;}
+.md{font-size:13px;line-height:1.75;color:var(--ink);}
+.md h4{font-size:13.5px;font-weight:700;margin:14px 0 6px;}
+.md h4:first-child{margin-top:0;}
+.md p{margin:7px 0;}
+.md ol,.md ul{margin:6px 0;padding-left:22px;}
+.md li{margin:4px 0;}
+.md ul{list-style:disc;}
+.md code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;
+ background:#e8eef5;color:#0a4a8c;padding:1px 5px;border-radius:5px;}
+.md strong{font-weight:700;}
+.md hr{border:none;border-top:1px solid var(--line);margin:12px 0;}
 """
 
 _JS = """
@@ -286,7 +395,7 @@ function openDrawer(id,year){
   if(year){ qs=by[year]||[]; suffix=`・${year} 年（${qs.length} 題）`; }
   else { const ys=Object.keys(by).sort((a,b)=>b-a); qs=[].concat(...ys.map(y=>by[y])); suffix=`（${qs.length} 題）`; }
   $('#dtitle').textContent=label+suffix;
-  $('#dbody').innerHTML=qs.map(q=>{
+  const qhtml=qs.map(q=>{
     let ex='';
     if(q.doctrines&&q.doctrines.length) ex+=`<div class="tag">學說</div>`+q.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
     if(q.practice&&q.practice.length) ex+=`<div class="tag">實務</div><div class="pr">${q.practice.map(esc).join('｜')}</div>`;
@@ -299,9 +408,14 @@ function openDrawer(id,year){
         <div class="stem" style="font-weight:600;margin-top:6px">${esc(q.issue||'')}</div>${ex}${why}</div>`;
     }
     const kind=q.essay?'申論':'選擇';
+    // 擬答：只在「點進單年」那一題顯示（year 有值＝單年抽屜）；內容為已渲染 HTML
+    const ans=(year&&q.answer)?`<div class="tag ans-t">擬答</div><div class="md ans">${q.answer}</div>`:'';
     return `<div class="q"><span class="yr">${q.year} 年</span><span class="qid">${esc(q.qid)} · ${kind}</span>
-      <div class="stem">${esc(q.stem)}</div>${ex}</div>`;
+      <div class="stem">${esc(q.stem)}</div>${ans}${ex}</div>`;
   }).join('')||'<p style="color:#86868b">（無資料）</p>';
+  // 考點重點(primer)：放在題目清單下方，全年份/單年都顯示
+  const prim=(DATA.primers&&DATA.primers[id])?`<div class="primer"><div class="ptag">◆ 考點重點 ◆</div><div class="md">${DATA.primers[id]}</div></div>`:'';
+  $('#dbody').innerHTML=qhtml+prim;
   $('#scrim').classList.add('on');$('#drawer').classList.add('on');
 }
 function closeDrawer(){$('#scrim').classList.remove('on');$('#drawer').classList.remove('on');}
