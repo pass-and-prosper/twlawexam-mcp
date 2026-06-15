@@ -121,6 +121,17 @@ def init_schema(conn: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_issue ON essay_issues(issue);
         CREATE INDEX IF NOT EXISTS idx_issue_qid ON essay_issues(qid);
+
+        -- 爭點正規化: map each fact-bound 爭點 (essay_issues.issue) to a canonical
+        -- 爭點 family, so 熱度排行 surfaces RECURRING 爭點 across years instead of
+        -- one row per unique phrasing.
+        CREATE TABLE IF NOT EXISTS issue_canon (
+            issue         TEXT PRIMARY KEY,    -- the specific 爭點 string as extracted
+            canonical     TEXT NOT NULL,       -- the standard 爭點 family
+            topic_subject TEXT,
+            updated_at    TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_canon ON issue_canon(canonical);
         """
     )
     conn.commit()
@@ -511,32 +522,70 @@ def get_issues(conn: sqlite3.Connection, qid: str) -> list[dict]:
 
 
 def issue_distribution(conn: sqlite3.Connection, topic_subject: str | None = None) -> list[tuple]:
-    """(issue, n_questions, topic_subject) rows, most-frequent first — the REAL
-    申論考點分布 (by 爭點, not surface 罪名/章節)."""
+    """(爭點, n_questions, topic_subject) rows, most-frequent first — the REAL
+    申論考點分布 (by 爭點, not surface 罪名/章節).
+
+    Groups by the canonical 爭點 family when issue_canon has a mapping, else by
+    the raw issue (COALESCE) — so it surfaces RECURRING 爭點 once normalization
+    has run, and degrades gracefully to raw issues before it has.
+    """
+    base = (
+        "SELECT COALESCE(c.canonical, e.issue) AS grp, COUNT(DISTINCT e.qid), MAX(e.topic_subject) "
+        "FROM essay_issues e LEFT JOIN issue_canon c ON c.issue = e.issue {where} "
+        "GROUP BY grp ORDER BY 2 DESC, grp"
+    )
     if topic_subject:
-        rows = conn.execute(
-            """SELECT issue, COUNT(DISTINCT qid), MAX(topic_subject) FROM essay_issues
-               WHERE topic_subject=? GROUP BY issue ORDER BY 2 DESC, issue""",
-            (topic_subject,),
-        ).fetchall()
+        rows = conn.execute(base.format(where="WHERE e.topic_subject=?"), (topic_subject,)).fetchall()
     else:
-        rows = conn.execute(
-            """SELECT issue, COUNT(DISTINCT qid), MAX(topic_subject) FROM essay_issues
-               GROUP BY issue ORDER BY 2 DESC, issue"""
-        ).fetchall()
+        rows = conn.execute(base.format(where=""), ()).fetchall()
     return [(r[0], r[1], r[2]) for r in rows]
 
 
 def questions_by_issue(conn: sqlite3.Connection, issue: str) -> list[dict]:
-    """Every essay that examined this 爭點, with its 學說/實務 for that 爭點."""
+    """Every essay that examined this 爭點, with its 學說/實務 for that 爭點.
+
+    Matches either the specific issue string OR a canonical family name, so
+    searching a canonical 爭點 returns every fact-pattern under it.
+    """
     rows = conn.execute(
-        """SELECT e.qid, q.year, q.subject, e.doctrines, e.practice
+        """SELECT e.qid, q.year, q.subject, e.doctrines, e.practice, e.issue
            FROM essay_issues e JOIN questions q ON q.qid=e.qid
-           WHERE e.issue=? ORDER BY q.year DESC""",
-        (issue,),
+           LEFT JOIN issue_canon c ON c.issue=e.issue
+           WHERE e.issue=? OR c.canonical=? ORDER BY q.year DESC""",
+        (issue, issue),
     ).fetchall()
     return [{"qid": r[0], "year": r[1], "subject": r[2],
-             "doctrines": json.loads(r[3]), "practice": json.loads(r[4])} for r in rows]
+             "doctrines": json.loads(r[3]), "practice": json.loads(r[4]),
+             "issue": r[5]} for r in rows]
+
+
+def set_issue_canon(conn: sqlite3.Connection, mapping: dict) -> int:
+    """Bulk upsert 爭點 normalization. mapping: {specific issue: canonical family}."""
+    today = date.today().isoformat()
+    n = 0
+    with conn:
+        for issue, canonical in mapping.items():
+            ts = conn.execute(
+                "SELECT topic_subject FROM essay_issues WHERE issue=? LIMIT 1", (issue,)
+            ).fetchone()
+            conn.execute(
+                """INSERT INTO issue_canon (issue, canonical, topic_subject, updated_at)
+                   VALUES (?,?,?,?)
+                   ON CONFLICT(issue) DO UPDATE SET
+                     canonical=excluded.canonical, updated_at=excluded.updated_at""",
+                (issue, canonical, ts[0] if ts else None, today),
+            )
+            n += 1
+    return n
+
+
+def apply_issue_canon(conn: sqlite3.Connection) -> int:
+    """Restore 爭點 normalization from the bundled issue_canon.json (DB git-ignored)."""
+    try:
+        raw = (resources.files("twexam_mcp.data") / "issue_canon.json").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return 0
+    return set_issue_canon(conn, json.loads(raw))
 
 
 def apply_essay_issues(conn: sqlite3.Connection) -> int:
