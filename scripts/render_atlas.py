@@ -149,13 +149,16 @@ def assemble(conn) -> dict:
                   for ss in it["sub_subjects"]]
         sl1.append({"subject": it["subject"], "groups": groups})
 
-    def entry_canon(idd, label, by_year, answers=None):
+    def entry_canon(idd, label, by_year, answers=None, focus=None):
         answers = answers or {}
+        focus = focus or {}
         rows = {str(y): list(by_year[y].values()) for y in by_year}  # by_year[y] is {qid:entry}
         for qs in rows.values():
             for q in qs:
                 if q["qid"] in answers:  # 各題擬答（單年抽屜才顯示，由 JS 控制）
                     q["answer"] = _md_to_html(answers[q["qid"]])
+                if q["qid"] in focus:    # 題幹要紅虛線框的關鍵句（該爭點觸發點）
+                    q["focus"] = focus[q["qid"]]
         detail[idd] = rows
         years = [{"year": y, "count": len(by_year[y]), "essay": True} for y in sorted(by_year)]
         total = sum(len(v) for v in by_year.values())
@@ -189,7 +192,7 @@ def assemble(conn) -> dict:
         for canon, by_year in by_subject[ts]:
             pid = "e:" + canon
             pdata = primers_src.get(canon, {})
-            issues.append(entry_canon(pid, canon, by_year, pdata.get("answers")))
+            issues.append(entry_canon(pid, canon, by_year, pdata.get("answers"), pdata.get("focus")))
             if pdata.get("primer"):
                 primers[pid] = _md_to_html(pdata["primer"])
         issues.sort(key=lambda x: (-x["total"], x["label"]))
@@ -301,6 +304,11 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .q .tag.prac-t{color:#1b9e57;}     /* 實務＝綠 */
 .q .di{font-size:14.5px;line-height:1.85;background:#eef4ff;border-left:3px solid #0a6cff;border-radius:0 10px 10px 0;padding:10px 14px;margin:6px 0;}
 .q .pr{font-size:14px;line-height:1.8;background:#e9f8f0;border-left:3px solid #1b9e57;border-radius:0 10px 10px 0;padding:10px 14px;margin:6px 0;color:#0c6b3c;}
+.di .enum{color:#0a6cff;font-weight:800;}    /* 學說標號＝藍 */
+.pr .enum{color:#1b9e57;font-weight:800;}    /* 實務標號＝綠 */
+/* 題幹裡該爭點的關鍵句：紅虛線框（提醒「這裡是考點」），題幹其餘維持純黑 */
+.q .stem .focus{border:1.6px dashed #ff3b30;border-radius:7px;padding:1px 5px;margin:0 1px;
+ background:rgba(255,59,48,.06);box-decoration-break:clone;-webkit-box-decoration-break:clone;}
 .ucard{border:1px solid #ffe0b8;background:#fffaf3;}
 .pills{display:flex;flex-wrap:wrap;gap:7px;}
 .upill{font-size:13px;padding:5px 11px;border-radius:980px;background:#fff;border:1.5px dashed var(--orange);color:#9a5b00;font-weight:500;}
@@ -344,6 +352,10 @@ _JS = """
 const $=s=>document.querySelector(s);
 const BLUE={109:'#dcecfb',110:'#bcdcfa',111:'#94c6f6',112:'#5aa6f0',113:'#2f8be8',114:'#0a5fc2'};
 function esc(s){return (s+'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+// (1)文→(1) 文：學說/實務內嵌標號補空白＋上色，讀起來不擠
+function beautify(s){return s.replace(/([(（][0-9]+[)）])/g,'<b class="enum">$1</b> ');}
+// 題幹裡「該爭點觸發的關鍵句」用紅虛線框起來（focus 為精準子字串陣列）
+function markFocus(stem,focus){let h=esc(stem);(focus||[]).forEach(f=>{const ef=esc(f);if(ef)h=h.split(ef).join('<span class="focus">'+ef+'</span>');});return h;}
 function srcMeta(s){
   if(s==='高普考領先') return {b:'📈 高普考', c:'gk', bg:'#0a7d3c'};
   if(s==='法律系考古題') return {b:'🎓 法律系', c:'ls', bg:'#7a4ad0'};
@@ -417,8 +429,8 @@ function openDrawer(id,year){
   const qhtml=qs.map(q=>{
     let ex='';
     if(!en){  // enrich 存在時逐題籠統學說/實務不重複顯示（頂端統一顯示 enrich 版）
-      if(q.doctrines&&q.doctrines.length) ex+=`<div class="tag doc-t">學說</div>`+q.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
-      if(q.practice&&q.practice.length) ex+=`<div class="tag prac-t">實務</div><div class="pr">${q.practice.map(esc).join('｜')}</div>`;
+      if(q.doctrines&&q.doctrines.length) ex+=`<div class="tag doc-t">學說</div>`+q.doctrines.map(d=>`<div class="di">${beautify(esc(d))}</div>`).join('');
+      if(q.practice&&q.practice.length) ex+=`<div class="tag prac-t">實務</div><div class="pr">${q.practice.map(d=>beautify(esc(d))).join('｜')}</div>`;
     }
     if(q.untested){
       const m=srcMeta(q.source);
@@ -432,13 +444,13 @@ function openDrawer(id,year){
     // 擬答：只在「點進單年」那一題顯示（year 有值＝單年抽屜）；內容為已渲染 HTML
     const ans=(year&&q.answer)?`<div class="tag ans-t">擬答</div><div class="md ans">${q.answer}</div>`:'';
     return `<div class="q"><span class="yr">${q.year} 年</span><span class="qid">${esc(q.qid)} · ${kind}</span>
-      <div class="stem">${esc(q.stem)}</div>${ans}${ex}</div>`;
+      <div class="stem">${markFocus(q.stem,q.focus)}</div>${ans}${ex}</div>`;
   }).join('')||'<p style="color:#86868b">（無資料）</p>';
   // tested 爭點：enrich 後的學說(含學者)/實務(具體字號)，放在題目下方統一顯示一次
   let enh='';
   if(en){
-    if(en.doctrines&&en.doctrines.length) enh+=`<div class="tag doc-t">學說（含學者／標準說）</div>`+en.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
-    if(en.practice&&en.practice.length) enh+=`<div class="tag prac-t">實務（字號·已驗）</div><div class="pr">${en.practice.map(esc).join('｜')}</div>`;
+    if(en.doctrines&&en.doctrines.length) enh+=`<div class="tag doc-t">學說（含學者／標準說）</div>`+en.doctrines.map(d=>`<div class="di">${beautify(esc(d))}</div>`).join('');
+    if(en.practice&&en.practice.length) enh+=`<div class="tag prac-t">實務（字號·已驗）</div><div class="pr">${en.practice.map(d=>beautify(esc(d))).join('｜')}</div>`;
     if(enh) enh=`<div class="q" style="border-bottom:2px solid var(--line)">${enh}</div>`;
   }
   // 考點重點(primer)：放在最下方，全年份/單年都顯示

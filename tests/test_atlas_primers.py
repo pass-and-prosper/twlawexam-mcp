@@ -67,6 +67,7 @@ def _seed_pursuit(tmp_path):
         "緊追權之行使要件（UNCLOS第111條）": {
             "primer": "## 要件\n1. **起追地點**：須在內水／領海內。",
             "answers": {qid: "**114-3（鄰接區18浬）** 核心：`§33` 移民管制可緊追。"},
+            "focus": {qid: ["基線外18浬處"]},
         }
     }, ensure_ascii=False), encoding="utf-8")
     return c, dbp, qid
@@ -90,6 +91,16 @@ def test_assemble_attaches_answer_to_question(tmp_path, monkeypatch):
     q = data["detail"][pid]["114"][0]
     assert q["qid"] == qid
     assert "<code>§33</code>" in q["answer"]
+    c.close()
+
+
+def test_assemble_attaches_focus_to_question(tmp_path, monkeypatch):
+    c, dbp, qid = _seed_pursuit(tmp_path)
+    monkeypatch.setattr(db, "default_db_path", lambda: dbp)
+    data = assemble(c)
+    pid = "e:緊追權之行使要件（UNCLOS第111條）"
+    q = data["detail"][pid]["114"][0]
+    assert q["focus"] == ["基線外18浬處"]   # 紅虛線要框的關鍵句
     c.close()
 
 
