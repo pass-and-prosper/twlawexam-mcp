@@ -312,23 +312,32 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .circ.pred.ls{background:#f0eafc;border-color:#cbb6ee;color:#7a4ad0;}
 .row.ut .label{color:#4a3a8c;}
 .row.ut:hover .label{color:#6a3df0;}
-/* 擬答（單年抽屜）＋ 考點重點(primer) */
-.q .tag.ans-t{color:#0a5fc2;}
-.ans{font-size:15px;line-height:1.9;background:#eef6ff;border:1px solid #d4e6fb;border-left:3px solid var(--blue);
- border-radius:10px;padding:12px 16px;margin-top:6px;}
-.primer{margin-top:26px;background:#f5f5f7;border:1px solid var(--line);border-radius:16px;padding:18px 22px;}
-.primer .ptag{font-size:14px;font-weight:700;color:#3a3a3c;letter-spacing:.05em;margin-bottom:12px;text-align:center;}
+/* 擬答＝橘（行動·你要寫的） */
+.q .tag.ans-t{color:#e07b00;}
+.ans{font-size:15px;line-height:1.9;background:#fff6ea;border:1px solid #ffe2bd;border-left:3px solid #ff9500;
+ border-radius:0 10px 10px 0;padding:12px 16px;margin-top:6px;}
+/* 考點重點＝紫（要件 chunk 化、數字徽章好背） */
+.primer{margin-top:26px;background:#faf8ff;border:1px solid #e7defc;border-radius:16px;padding:18px 22px;box-shadow:0 1px 3px rgba(106,61,240,.06);}
+.primer .ptag{font-size:14px;font-weight:800;color:#6a3df0;letter-spacing:.06em;margin-bottom:12px;text-align:center;}
 .md{font-size:14.5px;line-height:1.9;color:var(--ink);}
-.md h4{font-size:15.5px;font-weight:700;margin:16px 0 8px;}
+.md h4{font-size:15.5px;font-weight:700;margin:16px 0 8px;color:#4a2db5;}
 .md h4:first-child{margin-top:0;}
 .md p{margin:9px 0;}
 .md ol,.md ul{margin:8px 0;padding-left:24px;}
 .md li{margin:7px 0;line-height:1.85;}
 .md ul{list-style:disc;}
+/* 要件用紫色數字徽章：chunk 化，一眼數出「幾個要件」 */
+.primer .md ol{counter-reset:rq;list-style:none;padding-left:0;}
+.primer .md ol>li{counter-increment:rq;position:relative;padding-left:34px;margin:11px 0;}
+.primer .md ol>li::before{content:counter(rq);position:absolute;left:0;top:1px;width:23px;height:23px;
+ background:#6a3df0;color:#fff;border-radius:50%;font-size:12.5px;font-weight:800;
+ display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(106,61,240,.35);}
+.primer .md ul{padding-left:20px;}
 .md code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;
- background:#e8eef5;color:#0a4a8c;padding:1px 6px;border-radius:5px;}
-.md strong{font-weight:700;}
-.md hr{border:none;border-top:1px solid var(--line);margin:14px 0;}
+ background:#ece6fb;color:#5b2bd6;padding:1px 6px;border-radius:5px;font-weight:600;}
+/* 必背關鍵：粗體上黃螢光（記憶錨點） */
+.md strong{font-weight:700;background:linear-gradient(transparent 58%,#ffe79e 58%);padding:0 1px;border-radius:2px;}
+.md hr{border:none;border-top:1px solid #e7defc;margin:14px 0;}
 """
 
 _JS = """
@@ -408,8 +417,8 @@ function openDrawer(id,year){
   const qhtml=qs.map(q=>{
     let ex='';
     if(!en){  // enrich 存在時逐題籠統學說/實務不重複顯示（頂端統一顯示 enrich 版）
-      if(q.doctrines&&q.doctrines.length) ex+=`<div class="tag">學說</div>`+q.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
-      if(q.practice&&q.practice.length) ex+=`<div class="tag">實務</div><div class="pr">${q.practice.map(esc).join('｜')}</div>`;
+      if(q.doctrines&&q.doctrines.length) ex+=`<div class="tag doc-t">學說</div>`+q.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
+      if(q.practice&&q.practice.length) ex+=`<div class="tag prac-t">實務</div><div class="pr">${q.practice.map(esc).join('｜')}</div>`;
     }
     if(q.untested){
       const m=srcMeta(q.source);
@@ -428,8 +437,8 @@ function openDrawer(id,year){
   // tested 爭點：enrich 後的學說(含學者)/實務(具體字號)，放在題目下方統一顯示一次
   let enh='';
   if(en){
-    if(en.doctrines&&en.doctrines.length) enh+=`<div class="tag">學說（含學者／標準說）</div>`+en.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
-    if(en.practice&&en.practice.length) enh+=`<div class="tag">實務（字號·已驗）</div><div class="pr">${en.practice.map(esc).join('｜')}</div>`;
+    if(en.doctrines&&en.doctrines.length) enh+=`<div class="tag doc-t">學說（含學者／標準說）</div>`+en.doctrines.map(d=>`<div class="di">${esc(d)}</div>`).join('');
+    if(en.practice&&en.practice.length) enh+=`<div class="tag prac-t">實務（字號·已驗）</div><div class="pr">${en.practice.map(esc).join('｜')}</div>`;
     if(enh) enh=`<div class="q" style="border-bottom:2px solid var(--line)">${enh}</div>`;
   }
   // 考點重點(primer)：放在最下方，全年份/單年都顯示
