@@ -9,7 +9,21 @@ from pathlib import Path
 from twexam_mcp.models.question import Question
 
 
-def connect(path) -> sqlite3.Connection:
+def _progress_path_for(bank_path) -> str:
+    """Sibling path of the personal-progress DB for a given bank DB path.
+
+    Personal practice history (attempts / review_state) lives in a SEPARATE,
+    git-ignored ``progress.db`` next to the shippable question bank, so it can
+    never be committed/published alongside ``questions.db``. An in-memory bank
+    gets an in-memory progress DB (ephemeral, e.g. the seed-fallback path and
+    some tests)."""
+    s = str(bank_path)
+    if s == ":memory:":
+        return ":memory:"
+    return str(Path(s).with_name("progress.db"))
+
+
+def connect(path, progress_path=None) -> sqlite3.Connection:
     # NOTE: isolation_level="" (the default) enables Python's implicit
     # transaction management, which is required for `with conn:` to issue
     # BEGIN/COMMIT/ROLLBACK correctly.  Do NOT pass isolation_level=None
@@ -19,6 +33,13 @@ def connect(path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
+    # Attach the personal-progress DB as `prog`. attempts/review_state live ONLY
+    # here (never in the bank), so practice history is physically incapable of
+    # entering version control. record_answer / reset_progress write only to
+    # `prog`, so each write transaction touches a single database (atomic
+    # regardless of journal mode); cross-DB JOINs against main.questions are
+    # read-only and fine.
+    conn.execute("ATTACH DATABASE ? AS prog", (progress_path or _progress_path_for(path),))
     return conn
 
 
@@ -54,16 +75,18 @@ def init_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_q_topic ON questions(topic_point);
 
         -- Weak-point engine: immutable attempt log + per-question SR state.
-        -- Personal progress data; lives only in the git-ignored questions.db.
-        CREATE TABLE IF NOT EXISTS attempts (
+        -- Personal progress data; lives ONLY in the attached, git-ignored
+        -- prog (progress.db) — never in the shippable bank (questions.db).
+        -- All reads/writes of these two tables are qualified with `prog.`.
+        CREATE TABLE IF NOT EXISTS prog.attempts (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             qid         TEXT NOT NULL,
             user_answer TEXT,
             is_correct  INTEGER,          -- 1/0; NULL = essay self-grade omitted
             answered_at TEXT NOT NULL      -- ISO date (YYYY-MM-DD)
         );
-        CREATE INDEX IF NOT EXISTS idx_attempts_qid ON attempts(qid);
-        CREATE TABLE IF NOT EXISTS review_state (
+        CREATE INDEX IF NOT EXISTS prog.idx_attempts_qid ON attempts(qid);
+        CREATE TABLE IF NOT EXISTS prog.review_state (
             qid          TEXT PRIMARY KEY,
             last_answer  TEXT,
             last_correct INTEGER,
@@ -74,7 +97,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
             due_date     TEXT,                          -- ISO date next due
             updated_at   TEXT
         );
-        CREATE INDEX IF NOT EXISTS idx_review_due ON review_state(due_date);
+        CREATE INDEX IF NOT EXISTS prog.idx_review_due ON review_state(due_date);
 
         -- Per-考點 study primer: must-know 法條/判決/釋字/學說/陷阱, read before drilling.
         CREATE TABLE IF NOT EXISTS topic_notes (
@@ -310,6 +333,12 @@ def default_db_path() -> Path:
     return Path(__file__).resolve().parent.parent / "data" / "questions.db"
 
 
+def default_progress_path() -> Path:
+    """git-ignored personal-progress DB (attempts/review_state), sibling of the
+    shippable bank. Attached as `prog` by connect()."""
+    return Path(_progress_path_for(default_db_path()))
+
+
 def load_seed(conn: sqlite3.Connection) -> int:
     """Load (or reload) the bundled seed data in a single atomic transaction.
 
@@ -328,9 +357,10 @@ def load_seed(conn: sqlite3.Connection) -> int:
 def apply_topic_map(conn: sqlite3.Connection) -> int:
     """Restore 考點 classifications from the bundled topic_map.json.
 
-    questions.db is git-ignored, so the classification work survives only here.
-    Run this after any full re-ingest/rebuild to re-attach (topic_subject,
-    topic_point) onto questions by qid. Missing qids are skipped silently.
+    questions.db is a rebuildable artifact, so this JSON is the durable source
+    of the classification work; re-applying it after any full re-ingest/rebuild
+    re-attaches (topic_subject, topic_point) onto questions by qid. Missing qids
+    are skipped silently.
     Returns the number of rows updated.
     """
     try:
@@ -352,8 +382,9 @@ def apply_topic_map(conn: sqlite3.Connection) -> int:
 def apply_essay_answers(conn: sqlite3.Connection) -> int:
     """Restore essay model answers (擬答) from the bundled essay_answers.json.
 
-    questions.db is git-ignored, so the AI-generated 擬答 survive only here.
-    Run after any full re-ingest/rebuild to re-attach model_answer by qid.
+    questions.db is a rebuildable artifact, so this JSON is the durable source
+    of the AI-generated 擬答. Run after any full re-ingest/rebuild to re-attach
+    model_answer by qid.
     Returns the number of rows updated.
     """
     try:
@@ -403,9 +434,10 @@ def retag_all_statutes(conn: sqlite3.Connection) -> dict[str, list[str]]:
 def apply_statute_map(conn: sqlite3.Connection) -> int:
     """Restore richer statutes + statute_xref from the bundled statute_map.json.
 
-    questions.db is git-ignored, so the re-tagging work (retag_all_statutes)
-    survives a full rebuild only here. Mirrors apply_essay_answers /
-    apply_topic_map. Missing qids are skipped. Returns rows updated.
+    questions.db is a rebuildable artifact, so this JSON is the durable source
+    of the re-tagging work (retag_all_statutes) across a full rebuild. Mirrors
+    apply_essay_answers / apply_topic_map. Missing qids are skipped. Returns
+    rows updated.
     """
     try:
         raw = (resources.files("twexam_mcp.data") / "statute_map.json").read_text(encoding="utf-8")
@@ -471,11 +503,11 @@ def record_answer(conn, qid, user_answer=None, self_correct=None, today=None) ->
 
     with conn:
         conn.execute(
-            "INSERT INTO attempts (qid, user_answer, is_correct, answered_at) VALUES (?,?,?,?)",
+            "INSERT INTO prog.attempts (qid, user_answer, is_correct, answered_at) VALUES (?,?,?,?)",
             (qid, user_answer, is_correct, today),
         )
         st = conn.execute(
-            "SELECT streak, n_attempts, n_correct FROM review_state WHERE qid=?", (qid,)
+            "SELECT streak, n_attempts, n_correct FROM prog.review_state WHERE qid=?", (qid,)
         ).fetchone()
         streak = st["streak"] if st else 0
         n_att = (st["n_attempts"] if st else 0) + 1
@@ -493,7 +525,7 @@ def record_answer(conn, qid, user_answer=None, self_correct=None, today=None) ->
             interval = 0
 
         conn.execute(
-            """INSERT INTO review_state
+            """INSERT INTO prog.review_state
                  (qid, last_answer, last_correct, n_attempts, n_correct, streak, interval_days, due_date, updated_at)
                VALUES (?,?,?,?,?,?,?,?,?)
                ON CONFLICT(qid) DO UPDATE SET
@@ -521,7 +553,7 @@ def get_weak_topics(conn, q_type="mcq", min_attempts=1, limit=20) -> list[tuple]
     rows = conn.execute(
         """SELECT q.topic_subject, q.topic_point,
                   SUM(r.n_attempts) AS att, SUM(r.n_correct) AS cor
-           FROM review_state r JOIN questions q ON q.qid = r.qid
+           FROM prog.review_state r JOIN questions q ON q.qid = r.qid
            WHERE q.q_type = ? AND q.topic_point IS NOT NULL
            GROUP BY q.topic_subject, q.topic_point
            HAVING att >= ?
@@ -538,13 +570,13 @@ def get_progress(conn, q_type="mcq", today=None) -> dict:
     agg = conn.execute(
         """SELECT COALESCE(SUM(r.n_attempts),0), COALESCE(SUM(r.n_correct),0),
                   COUNT(*)
-           FROM review_state r JOIN questions q ON q.qid=r.qid
+           FROM prog.review_state r JOIN questions q ON q.qid=r.qid
            WHERE q.q_type=?""",
         (q_type,),
     ).fetchone()
     attempts, correct, seen = agg[0], agg[1], agg[2]
     due = conn.execute(
-        """SELECT COUNT(*) FROM review_state r JOIN questions q ON q.qid=r.qid
+        """SELECT COUNT(*) FROM prog.review_state r JOIN questions q ON q.qid=r.qid
            WHERE q.q_type=? AND r.due_date IS NOT NULL AND r.due_date <= ?""",
         (q_type, today),
     ).fetchone()[0]
@@ -576,27 +608,27 @@ def practice_weak(conn, n=5, subject=None, q_type="mcq", today=None) -> list[Que
     # --- tier 1: due reviews ---
     if subject is None:
         due_rows = conn.execute(
-            """SELECT q.* FROM review_state r JOIN questions q ON q.qid=r.qid
+            """SELECT q.* FROM prog.review_state r JOIN questions q ON q.qid=r.qid
                WHERE q.q_type=? AND r.due_date IS NOT NULL AND r.due_date<=?""",
             (q_type, today),
         ).fetchall()
         seen_rows = conn.execute(
             """SELECT q.* FROM questions q WHERE q.q_type=? AND q.qid IN
-                 (SELECT qid FROM review_state)""", (q_type,),
+                 (SELECT qid FROM prog.review_state)""", (q_type,),
         ).fetchall()
         unseen_rows = conn.execute(
             """SELECT q.* FROM questions q WHERE q.q_type=? AND q.qid NOT IN
-                 (SELECT qid FROM review_state)""", (q_type,),
+                 (SELECT qid FROM prog.review_state)""", (q_type,),
         ).fetchall()
     else:
         due_rows = conn.execute(
-            """SELECT q.* FROM review_state r JOIN questions q ON q.qid=r.qid
+            """SELECT q.* FROM prog.review_state r JOIN questions q ON q.qid=r.qid
                WHERE q.q_type=? AND q.subject=? AND r.due_date IS NOT NULL AND r.due_date<=?""",
             (q_type, subject, today),
         ).fetchall()
         unseen_rows = conn.execute(
             """SELECT q.* FROM questions q WHERE q.q_type=? AND q.subject=? AND q.qid NOT IN
-                 (SELECT qid FROM review_state)""", (q_type, subject),
+                 (SELECT qid FROM prog.review_state)""", (q_type, subject),
         ).fetchall()
 
     out: list[Question] = []
@@ -622,8 +654,8 @@ def practice_weak(conn, n=5, subject=None, q_type="mcq", today=None) -> list[Que
 def reset_progress(conn) -> None:
     """Wipe all attempts and review state (start a fresh practice history)."""
     with conn:
-        conn.execute("DELETE FROM attempts")
-        conn.execute("DELETE FROM review_state")
+        conn.execute("DELETE FROM prog.attempts")
+        conn.execute("DELETE FROM prog.review_state")
 
 
 def set_topic_primer(conn, topic_point, primer) -> None:
@@ -649,7 +681,8 @@ def get_topic_primer(conn, topic_point) -> dict:
 
 
 def apply_topic_notes(conn: sqlite3.Connection) -> int:
-    """Restore all 考點 primers from the bundled topic_notes.json (DB git-ignored)."""
+    """Restore all 考點 primers from the bundled topic_notes.json (the durable
+    source; questions.db is a rebuildable artifact)."""
     try:
         raw = (resources.files("twexam_mcp.data") / "topic_notes.json").read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -693,7 +726,7 @@ def get_readiness(conn, target=0.60, q_type="mcq", min_attempts=2, daily=25) -> 
 
     meas = {r[0]: (r[1], r[2], r[3]) for r in conn.execute(
         """SELECT q.topic_point, SUM(r.n_attempts), SUM(r.n_correct), COUNT(DISTINCT r.qid)
-           FROM review_state r JOIN questions q ON q.qid=r.qid
+           FROM prog.review_state r JOIN questions q ON q.qid=r.qid
            WHERE q.q_type=? AND q.topic_point IS NOT NULL
            GROUP BY q.topic_point""", (q_type,))}
 

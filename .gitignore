@@ -13,3 +13,16 @@ twexam_mcp/data/pdfs/
 
 # phone-serving bearer token (local secret)
 .twexam_token
+
+# personal practice history — attempts/review_state live here, NEVER published.
+# Physically separate from the shippable bank (questions.db) so it cannot be
+# committed. (-wal/-shm are SQLite sidecars.)
+twexam_mcp/data/progress.db
+twexam_mcp/data/progress.db-wal
+twexam_mcp/data/progress.db-shm
+# defensive: never track the bank's SQLite sidecars either
+twexam_mcp/data/questions.db-wal
+twexam_mcp/data/questions.db-shm
+# local DB backups produced by migration / release scripts
+twexam_mcp/data/*.premigrate.bak
+twexam_mcp/data/*.userbak
