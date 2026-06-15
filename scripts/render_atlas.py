@@ -297,7 +297,13 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .drawer header{padding:20px 28px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:flex-start;}
 .drawer header h2{font-size:18px;margin:0;font-weight:600;line-height:1.45;flex:1;}
 .drawer .x{border:none;background:#e8e8ed;border-radius:50%;width:32px;height:32px;font-size:17px;cursor:pointer;color:#3a3a3c;flex:0 0 auto;}
-.drawer .body{overflow:auto;padding:14px 28px 46px;}
+.drawer .body{overflow:auto;padding:14px 30px 46px;}
+/* 全螢幕配版：題目｜解析 兩欄；窄螢幕收成單欄 */
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:34px;align-items:start;max-width:1700px;margin:0 auto;}
+.col-q,.col-a{min-width:0;}
+.col-q{position:sticky;top:0;align-self:start;}
+.solo{max-width:1040px;margin:0 auto;}
+@media(max-width:1080px){.cols{grid-template-columns:1fr;gap:0;}.col-q{position:static;}}
 .q{padding:18px 0;border-bottom:1px solid var(--line);}
 .q .yr{display:inline-block;font-size:13px;font-weight:700;color:#fff;background:var(--blue);padding:3px 11px;border-radius:980px;margin-right:9px;}
 .q .qid{font-size:12.5px;color:var(--muted);}
@@ -457,23 +463,25 @@ function openDrawer(id,year){
         <div class="stem" style="font-weight:600;margin-top:6px">${esc(q.issue||'')}</div>${ex}${why}</div>`;
     }
     const kind=q.essay?'申論':'選擇';
-    // 擬答：只在「點進單年」那一題顯示（year 有值＝單年抽屜）；內容為已渲染 HTML
-    const ans=(year&&q.answer)?`<div class="tag ans-t">擬答</div><div class="md ans">${q.answer}</div>`:'';
     const opts=q.options?optionsHtml(q.options,q.correct):'';  // 選擇題選項＋正解
     return `<div class="q"><span class="yr">${q.year} 年</span><span class="qid">${esc(q.qid)} · ${kind}</span>
-      <div class="stem">${markFocus(q.stem,q.focus)}</div>${opts}${ans}${ex}</div>`;
+      <div class="stem">${markFocus(q.stem,q.focus)}</div>${opts}${ex}</div>`;
   }).join('')||'<p style="color:#86868b">（無資料）</p>';
-  // tested 爭點：enrich 後的學說(含學者)/實務(具體字號)，放在題目下方統一顯示一次
+  // 擬答（單年抽屜，每題）→ 移到右欄「解析」
+  const ansHtml=year?qs.filter(q=>q.answer).map(q=>`<div class="tag ans-t">擬答</div><div class="md ans">${q.answer}</div>`).join(''):'';
+  // tested 爭點：enrich 後的學說(含學者)/實務(具體字號)
   let enh='';
   if(en){
     if(en.doctrines&&en.doctrines.length) enh+=`<div class="tag doc-t">學說（含學者／標準說）</div>`+en.doctrines.map(d=>`<div class="di">${beautify(esc(d))}</div>`).join('');
     if(en.practice&&en.practice.length) enh+=`<div class="tag prac-t">實務（字號·已驗）</div><div class="pr">${en.practice.map(d=>beautify(esc(d))).join('｜')}</div>`;
-    if(enh) enh=`<div class="q" style="border-bottom:2px solid var(--line)">${enh}</div>`;
   }
-  // 考點重點(primer)：放在最下方，全年份/單年都顯示
+  const analysis=ansHtml+enh;  // 需 .q 祖先讓 .tag/.di/.pr 樣式生效
   const prim=(DATA.primers&&DATA.primers[id])?`<div class="primer"><div class="ptag">◆ 考點重點 ◆</div><div class="md">${DATA.primers[id]}</div></div>`:'';
-  // 題目最上方 → 學說/實務(enrich) → 考點重點
-  $('#dbody').innerHTML=qhtml+enh+prim;
+  const right=(analysis?`<div class="q">${analysis}</div>`:'')+prim;
+  // 全螢幕配版：有解析 → 左欄題目／右欄解析(擬答+學說實務+考點重點)；無解析 → 單欄置中限寬好讀
+  $('#dbody').innerHTML = right.trim()
+    ? `<div class="cols"><div class="col-q">${qhtml}</div><div class="col-a">${right}</div></div>`
+    : `<div class="solo">${qhtml}</div>`;
   $('#scrim').classList.add('on');$('#drawer').classList.add('on');
 }
 function closeDrawer(){$('#scrim').classList.remove('on');$('#drawer').classList.remove('on');}
