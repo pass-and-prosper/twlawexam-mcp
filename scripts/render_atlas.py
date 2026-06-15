@@ -95,6 +95,13 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .tabs{display:flex;gap:8px;margin-left:auto;}
 .tab{font-size:14px;font-weight:600;padding:7px 16px;border-radius:980px;border:none;background:#e8e8ed;color:#3a3a3c;cursor:pointer;}
 .tab.on{background:var(--blue);color:#fff;}
+.subbar{display:flex;gap:8px;overflow-x:auto;padding:11px 22px;background:#eef0f3;border-bottom:1px solid var(--line);
+ -webkit-overflow-scrolling:touch;scrollbar-width:thin;}
+.sbtn{flex:0 0 auto;font-size:13px;font-weight:500;padding:6px 14px;border-radius:980px;border:1px solid var(--line);
+ background:#fff;color:#3a3a3c;cursor:pointer;white-space:nowrap;}
+.sbtn:hover{border-color:#c7c7cc;}
+.sbtn.on{background:var(--blue);color:#fff;border-color:var(--blue);}
+.sbtn.uc.on{background:var(--orange);border-color:var(--orange);}
 .wrap{max-width:1080px;margin:0 auto;padding:22px 20px 90px;}
 .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px 20px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
 .card h3{margin:0 0 2px;font-size:16px;font-weight:600;}
@@ -153,19 +160,20 @@ function rows(items,recur){
     <span class="label" data-id="${esc(t.id)}">${esc(t.label)}</span>
     <span class="circs">${circles(t)}</span></div>`).join('');
 }
-function renderSL1(){
-  return DATA.sl1.map(sub=>{
+function subjectCard(tab,sub){
+  if(tab==='sl1'){
     const tot=sub.groups.reduce((a,g)=>a+g.topics.reduce((b,t)=>b+t.total,0),0);
     const gs=sub.groups.map(g=>`<div class="gname">${esc(g.name)}</div>${rows(g.topics,false)}`).join('');
     return `<div class="card"><h3>${esc(sub.subject)}</h3><div class="meta">合計 ${tot} 題（選擇）</div>${gs}</div>`;
-  }).join('');
+  }
+  const tot=sub.issues.reduce((a,i)=>a+i.total,0);
+  return `<div class="card"><h3>${esc(sub.subject)}</h3>
+    <div class="meta">${sub.issues.length} 個爭點 · ${tot} 題（申論）· 反覆考者粗體</div>${rows(sub.issues,true)}</div>`;
 }
-function renderSL2(){
-  return DATA.sl2.map(sub=>{
-    const tot=sub.issues.reduce((a,i)=>a+i.total,0);
-    return `<div class="card"><h3>${esc(sub.subject)}</h3>
-      <div class="meta">${sub.issues.length} 個爭點 · ${tot} 題（申論）· 反覆考者粗體</div>${rows(sub.issues,true)}</div>`;
-  }).join('');
+function shortName(s){const m=s.match(/（(.+)）/);return m?m[1]:s;}
+function subjectBar(tab){
+  const chips=DATA[tab].map((s,i)=>`<button class="sbtn" data-tab="${tab}" data-i="${i}">${esc(shortName(s.subject))}</button>`).join('');
+  return chips+`<button class="sbtn uc" data-tab="${tab}" data-i="uncov">🆕 未考過 ${DATA.uncovered_list.length}</button>`;
 }
 function renderUncov(){
   const u=DATA.uncovered_list||[]; if(!u.length) return '';
@@ -173,11 +181,15 @@ function renderUncov(){
     <div class="meta">母清單有、歷屆零題（選擇＋申論都沒考過）</div>
     <div class="pills">${u.map(t=>`<span class="upill">${esc(t)}</span>`).join('')}</div></div>`;
 }
+function selectSubject(tab,i){
+  document.querySelectorAll('.sbtn').forEach(b=>b.classList.toggle('on', b.dataset.tab===tab && String(b.dataset.i)===String(i)));
+  $('#content').innerHTML = (i==='uncov') ? renderUncov() : subjectCard(tab, DATA[tab][i]);
+  window.scrollTo(0,0);
+}
 function show(tab){
-  $('#sl1').classList.toggle('hidden',tab!=='sl1');
-  $('#sl2').classList.toggle('hidden',tab!=='sl2');
-  $('#t1').classList.toggle('on',tab==='sl1');
-  $('#t2').classList.toggle('on',tab==='sl2');
+  $('#t1').classList.toggle('on',tab==='sl1'); $('#t2').classList.toggle('on',tab==='sl2');
+  $('#subbar').innerHTML=subjectBar(tab);
+  selectSubject(tab,0);
 }
 function openDrawer(id,year){
   const by=DATA.detail[id]||{}, label=id.slice(2);
@@ -197,12 +209,12 @@ function openDrawer(id,year){
 }
 function closeDrawer(){$('#scrim').classList.remove('on');$('#drawer').classList.remove('on');}
 document.addEventListener('click',e=>{
+  const b=e.target.closest('.sbtn'); if(b){selectSubject(b.dataset.tab, b.dataset.i==='uncov'?'uncov':+b.dataset.i);return;}
   const c=e.target.closest('.circ[data-id]'); if(c){openDrawer(c.dataset.id,c.dataset.year);return;}
   const l=e.target.closest('.label[data-id]'); if(l){openDrawer(l.dataset.id,null);}
 });
 window.addEventListener('DOMContentLoaded',()=>{
-  $('#uncov').innerHTML=renderUncov();
-  $('#sl1').innerHTML=renderSL1(); $('#sl2').innerHTML=renderSL2(); show('sl1');
+  show('sl1');
   $('#t1').onclick=()=>show('sl1'); $('#t2').onclick=()=>show('sl2');
   $('#scrim').onclick=closeDrawer; $('#dx').onclick=closeDrawer;
 });
@@ -224,7 +236,8 @@ def render(data: dict) -> str:
         '<div class="topbar"><h1>考點地圖 · 司律</h1>' + chips
         + '<div class="tabs"><button class="tab" id="t1">一試（選擇）</button>'
         '<button class="tab" id="t2">二試（申論）</button></div></div>'
-        '<div class="wrap"><div id="uncov"></div><div id="sl1"></div><div id="sl2"></div></div>'
+        '<div id="subbar" class="subbar"></div>'
+        '<div class="wrap"><div id="content"></div></div>'
         '<div class="scrim" id="scrim"></div>'
         '<aside class="drawer" id="drawer"><header><h2 id="dtitle"></h2>'
         '<button class="x" id="dx">×</button></header>'
