@@ -104,6 +104,25 @@ def test_assemble_attaches_focus_to_question(tmp_path, monkeypatch):
     c.close()
 
 
+def test_assemble_mcq_includes_options_and_correct(tmp_path, monkeypatch):
+    # 一試選擇題抽屜要能顯示選項＋正解 → sl1 detail 須帶 options(list) + correct(letter)
+    dbp = tmp_path / "questions.db"
+    c = db.connect(dbp)
+    db.init_schema(c)
+    db.upsert_question(c, Question(
+        113, "sl1", "民法與民事訴訟法", 9, "mcq", "下列關於法律行為之敘述，何者正確？",
+        ["意思表示須一致", "要物契約即成立", "停止條件成就前已生效", "死因贈與為單獨行為"],
+        answer="A", topic_subject="民法", topic_point="法律行為"))
+    c.commit()
+    monkeypatch.setattr(db, "default_db_path", lambda: dbp)
+    data = assemble(c)
+    q = data["detail"]["m:法律行為"]["113"][0]
+    assert q["essay"] is False
+    assert q["options"][0] == "意思表示須一致" and len(q["options"]) == 4
+    assert q["correct"] == "A"
+    c.close()
+
+
 def test_assemble_no_primer_when_absent(tmp_path, monkeypatch):
     # 沒有 issue_primers.json 時不可炸，primers 為空 dict、題目無 answer
     c, dbp, qid = _seed_pursuit(tmp_path)

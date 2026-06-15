@@ -91,12 +91,15 @@ def assemble(conn) -> dict:
     # questions by topic_point & year, split by 選擇/申論
     mcq: dict[str, dict] = {}   # topic -> {year:[q]}
     es_t: dict[str, dict] = {}  # topic -> {year:[q]}  (essays, by topic_point)
-    for qid, year, stem, tp, qtype in conn.execute(
-        "SELECT qid, year, stem, topic_point, q_type FROM questions WHERE topic_point IS NOT NULL"
+    for qid, year, stem, tp, qtype, options, answer in conn.execute(
+        "SELECT qid, year, stem, topic_point, q_type, options, answer FROM questions WHERE topic_point IS NOT NULL"
     ):
         bucket = es_t if qtype == "essay" else mcq
-        bucket.setdefault(tp, {}).setdefault(year, []).append(
-            {"qid": qid, "year": year, "stem": stem, "essay": qtype == "essay"})
+        entry = {"qid": qid, "year": year, "stem": stem, "essay": qtype == "essay"}
+        if qtype != "essay" and options:  # 選擇題：帶選項＋正解(letter，避開申論的 q.answer 擬答)
+            entry["options"] = json.loads(options)
+            entry["correct"] = answer
+        bucket.setdefault(tp, {}).setdefault(year, []).append(entry)
 
     # doctrines/practice per essay qid (aggregate that essay's 爭點)
     dp: dict[str, dict] = {}
@@ -304,6 +307,14 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .q .tag.prac-t{color:#1b9e57;}     /* 實務＝綠 */
 .q .di{font-size:14.5px;line-height:1.85;background:#eef4ff;border-left:3px solid #0a6cff;border-radius:0 10px 10px 0;padding:10px 14px;margin:6px 0;}
 .q .pr{font-size:14px;line-height:1.8;background:#e9f8f0;border-left:3px solid #1b9e57;border-radius:0 10px 10px 0;padding:10px 14px;margin:6px 0;color:#0c6b3c;}
+/* 選擇題選項：正解綠底打勾 */
+.opts{margin-top:11px;display:flex;flex-direction:column;gap:7px;}
+.opt{font-size:14px;line-height:1.7;background:#f5f5f7;border:1px solid transparent;border-radius:10px;padding:9px 13px;display:flex;gap:9px;align-items:baseline;}
+.opt .ol{font-weight:800;color:#86868b;flex:0 0 auto;}
+.opt .ot{flex:1;}
+.opt.ok{background:#e9f8f0;border-color:#a5dcb9;}
+.opt.ok .ol{color:#1b9e57;}
+.opt .ck{margin-left:auto;color:#1b9e57;font-weight:800;font-size:12px;flex:0 0 auto;white-space:nowrap;}
 .di .enum{color:#0a6cff;font-weight:800;}    /* 學說標號＝藍 */
 .pr .enum{color:#1b9e57;font-weight:800;}    /* 實務標號＝綠 */
 /* 題幹裡該爭點的關鍵句：紅虛線框（提醒「這裡是考點」），題幹其餘維持純黑 */
@@ -356,6 +367,11 @@ function esc(s){return (s+'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':
 function beautify(s){return s.replace(/([(（][0-9]+[)）])/g,'<b class="enum">$1</b> ');}
 // 題幹裡「該爭點觸發的關鍵句」用紅虛線框起來（focus 為精準子字串陣列）
 function markFocus(stem,focus){let h=esc(stem);(focus||[]).forEach(f=>{const ef=esc(f);if(ef)h=h.split(ef).join('<span class="focus">'+ef+'</span>');});return h;}
+// 選擇題：四選項 A/B/C/D，正解綠底打勾
+function optionsHtml(options,correct){const L='ABCDEFGHIJ';
+  return '<div class="opts">'+options.map((o,i)=>{const lt=L[i];const ok=(lt===correct);
+    return `<div class="opt${ok?' ok':''}"><span class="ol">${lt}</span><span class="ot">${esc(o)}</span>${ok?'<span class="ck">✓ 正解</span>':''}</div>`;
+  }).join('')+'</div>';}
 function srcMeta(s){
   if(s==='高普考領先') return {b:'📈 高普考', c:'gk', bg:'#0a7d3c'};
   if(s==='法律系考古題') return {b:'🎓 法律系', c:'ls', bg:'#7a4ad0'};
@@ -443,8 +459,9 @@ function openDrawer(id,year){
     const kind=q.essay?'申論':'選擇';
     // 擬答：只在「點進單年」那一題顯示（year 有值＝單年抽屜）；內容為已渲染 HTML
     const ans=(year&&q.answer)?`<div class="tag ans-t">擬答</div><div class="md ans">${q.answer}</div>`:'';
+    const opts=q.options?optionsHtml(q.options,q.correct):'';  // 選擇題選項＋正解
     return `<div class="q"><span class="yr">${q.year} 年</span><span class="qid">${esc(q.qid)} · ${kind}</span>
-      <div class="stem">${markFocus(q.stem,q.focus)}</div>${ans}${ex}</div>`;
+      <div class="stem">${markFocus(q.stem,q.focus)}</div>${opts}${ans}${ex}</div>`;
   }).join('')||'<p style="color:#86868b">（無資料）</p>';
   // tested 爭點：enrich 後的學說(含學者)/實務(具體字號)，放在題目下方統一顯示一次
   let enh='';
