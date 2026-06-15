@@ -371,6 +371,61 @@ def apply_essay_answers(conn: sqlite3.Connection) -> int:
     return n
 
 
+def retag_all_statutes(conn: sqlite3.Connection) -> dict[str, list[str]]:
+    """Recompute every question's statutes from stem + options + model_answer.
+
+    Fixes the ingest-time bug where statutes were tagged from the *stem only*
+    (pipeline.ingest_exam), so essays — whose 條號 live in the 擬答, not the
+    stem — were left with empty/partial `statutes`, silently breaking
+    search_by_statute / get_statute_frequency for the entire essay bank.
+
+    Updates questions.statutes AND rebuilds statute_xref atomically, and
+    returns {qid: [statutes]} so callers can persist a bundled statute_map.json.
+    """
+    from twexam_mcp.ingest import statute_tagger  # local: stdlib-only, no [ingest] extras
+    rows = conn.execute("SELECT qid, stem, options, model_answer FROM questions").fetchall()
+    result: dict[str, list[str]] = {}
+    with conn:
+        for r in rows:
+            opts = " ".join(json.loads(r["options"] or "[]"))
+            text = "\n".join(p for p in (r["stem"], opts, r["model_answer"]) if p)
+            sts = statute_tagger.extract_statutes(text)
+            conn.execute("UPDATE questions SET statutes=? WHERE qid=?",
+                         (json.dumps(sts, ensure_ascii=False), r["qid"]))
+            conn.execute("DELETE FROM statute_xref WHERE qid=?", (r["qid"],))
+            for s in sts:
+                conn.execute("INSERT OR IGNORE INTO statute_xref (statute, qid) VALUES (?,?)",
+                             (s, r["qid"]))
+            result[r["qid"]] = sts
+    return result
+
+
+def apply_statute_map(conn: sqlite3.Connection) -> int:
+    """Restore richer statutes + statute_xref from the bundled statute_map.json.
+
+    questions.db is git-ignored, so the re-tagging work (retag_all_statutes)
+    survives a full rebuild only here. Mirrors apply_essay_answers /
+    apply_topic_map. Missing qids are skipped. Returns rows updated.
+    """
+    try:
+        raw = (resources.files("twexam_mcp.data") / "statute_map.json").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return 0
+    mapping = json.loads(raw)
+    n = 0
+    with conn:
+        for qid, sts in mapping.items():
+            cur = conn.execute("UPDATE questions SET statutes=? WHERE qid=?",
+                               (json.dumps(sts, ensure_ascii=False), qid))
+            if cur.rowcount:
+                conn.execute("DELETE FROM statute_xref WHERE qid=?", (qid,))
+                for s in sts:
+                    conn.execute("INSERT OR IGNORE INTO statute_xref (statute, qid) VALUES (?,?)",
+                                 (s, qid))
+                n += cur.rowcount
+    return n
+
+
 # ---------------------------------------------------------------------------
 # Weak-point engine: spaced-repetition scheduling + mastery analytics
 # ---------------------------------------------------------------------------

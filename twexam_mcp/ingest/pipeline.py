@@ -26,14 +26,20 @@ def ingest_exam(conn, year_roc: int, exam: str, pdf_root) -> int:
             for q in paper.questions:
                 q.year = year_roc
                 q.answer = ans[q.q_no - 1] if q.q_no - 1 < len(ans) else None
-                q.statutes = statute_tagger.extract_statutes(q.stem)
+                # MCQ 條號 may sit in options, not just the stem
+                q.statutes = statute_tagger.extract_statutes(
+                    "\n".join([q.stem, *q.options]))
                 db.upsert_question(conn, q)
                 count += 1
         else:
             paper = pdf_parser.parse_essay_paper(qpath)
             for q in paper.questions:
                 q.year = year_roc
-                q.statutes = statute_tagger.extract_statutes(q.stem)
+                # Essay 條號 live mostly in the 擬答, which is attached later;
+                # db.retag_all_statutes re-tags from stem+options+model_answer
+                # once essay_answers are applied. Tag what we have now.
+                q.statutes = statute_tagger.extract_statutes(
+                    "\n".join(p for p in (q.stem, q.model_answer) if p))
                 db.upsert_question(conn, q)
                 count += 1
     return count
