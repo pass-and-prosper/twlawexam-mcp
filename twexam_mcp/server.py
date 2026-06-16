@@ -224,6 +224,14 @@ def get_issue_primer(issue: str) -> dict:
     return issues.get_issue_primer(get_conn(), issue)
 
 
+@mcp.tool()
+def get_issue_chain(qid: str) -> dict:
+    """爭點脈絡圖：一題的多個爭點不是孤立的——回傳它們的『先決問題』鏈（誰是誰的先決問題、
+    事實哪個轉折引爆下一個爭點）。破解「孤立考點背熟、遇綜合題卻看不出脈絡」。帶使用者解綜合
+    申論前先看脈絡；單爭點題或尚未編脈絡者 chain 為空。"""
+    return issues.get_issue_chain(get_conn(), qid)
+
+
 def main() -> None:
     # TWEXAM_TRANSPORT=http → remote server for phone use (via a tunnel / deploy
     # + Claude.ai custom connector). Default stdio = local desktop client.

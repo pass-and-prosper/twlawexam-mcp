@@ -141,6 +141,14 @@ def init_schema(conn: sqlite3.Connection) -> None:
             data       TEXT NOT NULL,      -- 完整 JSON: {primer, signals, prereq, answers, focus}
             updated_at TEXT
         );
+
+        -- 爭點脈絡圖: per-題(qid) 的多爭點「先決問題」鏈——破 silo，把孤立爭點接成
+        -- 解題脈絡（誰是誰的先決問題、事實哪個轉折引爆下一個）。bundled issue_chains.json。
+        CREATE TABLE IF NOT EXISTS issue_chains (
+            qid        TEXT PRIMARY KEY,
+            data       TEXT NOT NULL,      -- 完整 JSON: {summary, chain:[{no, issue, role, depends_on}]}
+            updated_at TEXT
+        );
         """
     )
     conn.commit()
@@ -903,6 +911,41 @@ def get_issue_primer(conn, issue) -> dict:
     d = json.loads(row[0])
     return {"issue": issue, "canon": canon, "signals": d.get("signals"),
             "prereq": d.get("prereq"), "primer": d.get("primer")}
+
+
+def apply_issue_chains(conn: sqlite3.Connection) -> int:
+    """Restore 爭點脈絡圖 from bundled issue_chains.json into the DB (single source for
+    BOTH get_issue_chain tool AND the atlas)."""
+    try:
+        raw = (resources.files("twexam_mcp.data") / "issue_chains.json").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return 0
+    mapping = json.loads(raw)
+    today = date.today().isoformat()
+    n = 0
+    with conn:
+        for qid, data in mapping.items():
+            conn.execute(
+                """INSERT INTO issue_chains (qid, data, updated_at) VALUES (?,?,?)
+                   ON CONFLICT(qid) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at""",
+                (qid, json.dumps(data, ensure_ascii=False), today),
+            )
+            n += 1
+    return n
+
+
+def get_issue_chain(conn, qid) -> dict:
+    """某申論題的爭點脈絡：多爭點的『先決問題』鏈（誰先決誰、事實哪轉折引爆下一個）。
+    無脈絡圖（單爭點或尚未編）時 chain 為空。"""
+    if not conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='issue_chains'"
+    ).fetchone():
+        return {"qid": qid, "summary": None, "chain": []}
+    row = conn.execute("SELECT data FROM issue_chains WHERE qid=?", (qid,)).fetchone()
+    if row is None:
+        return {"qid": qid, "summary": None, "chain": []}
+    d = json.loads(row[0])
+    return {"qid": qid, "summary": d.get("summary"), "chain": d.get("chain", [])}
 
 
 def get_grading_rubric(conn, qid) -> dict:

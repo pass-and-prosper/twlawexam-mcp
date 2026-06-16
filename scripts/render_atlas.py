@@ -913,6 +913,7 @@ def main(argv=None) -> int:
     db.apply_essay_issues(conn)  # 重建 ephemeral 爭點索引（bundled essay_issues.json）
     db.apply_topic_notes(conn)   # 選擇題考點重點（單一來源；atlas 與 MCP get_topic_primer 共用）
     db.apply_issue_primers(conn) # 申論爭點重點包（單一來源；atlas 與 MCP get_issue_primer 共用）
+    db.apply_issue_chains(conn)  # 爭點脈絡圖（單一來源；atlas 與 MCP get_issue_chain 共用）
     data = assemble(conn)
     out.write_text(render(data), encoding="utf-8")
     s = data["summary"]

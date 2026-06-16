@@ -50,3 +50,25 @@ def test_search_by_issue_returns_each_questions_doctrines(conn):
     assert len(hits) == 1
     assert hits[0]["qid"] == "114-sl2-刑法與刑事訴訟法-1"
     assert "具體危險說" in hits[0]["doctrines"]
+
+
+# --- 爭點脈絡圖 (get_issue_chain) ---
+
+def test_issue_chain_returns_dependency_links(conn):
+    import json
+    conn.execute("INSERT INTO issue_chains(qid, data, updated_at) VALUES(?,?,?)", (
+        "112-sl2-民法與民事訴訟法-1",
+        json.dumps({"summary": "酌減→溢付衍生三個環環相扣爭點",
+                    "chain": [{"no": 1, "issue": "對待給付判決", "depends_on": []},
+                              {"no": 2, "issue": "闡明義務", "depends_on": [1]},
+                              {"no": 3, "issue": "反訴給付得否假執行", "depends_on": [2]}]},
+                   ensure_ascii=False), "2026-01-01"))
+    conn.commit()
+    r = t.get_issue_chain(conn, "112-sl2-民法與民事訴訟法-1")
+    assert len(r["chain"]) == 3
+    assert r["chain"][2]["depends_on"] == [2]          # ③ 先決於 ②
+    assert "環環相扣" in r["summary"]
+
+
+def test_issue_chain_empty_for_unauthored(conn):
+    assert t.get_issue_chain(conn, "114-sl2-刑法與刑事訴訟法-1")["chain"] == []

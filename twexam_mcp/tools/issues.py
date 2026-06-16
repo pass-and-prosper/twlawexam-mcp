@@ -22,3 +22,8 @@ def get_issues(conn, qid: str) -> list[dict]:
 def get_issue_primer(conn, issue: str) -> dict:
     """取某申論爭點的重點包：辨識訊號＋前置觀念＋考點重點。"""
     return db.get_issue_primer(conn, issue)
+
+
+def get_issue_chain(conn, qid: str) -> dict:
+    """取某申論題的爭點脈絡：多爭點的先決問題鏈（破 silo，看出解題脈絡）。"""
+    return db.get_issue_chain(conn, qid)
