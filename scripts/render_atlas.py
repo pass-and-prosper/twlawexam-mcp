@@ -135,6 +135,10 @@ def assemble(conn) -> dict:
                          "doctrines": json.loads(doc), "practice": json.loads(prac), "issue": issue}
         canon_subject[canon] = ts
 
+    # 考點/爭點 一句話記法（年表右側空白處顯示，掃過去就複習重點）— bundled JSON，key=考點/爭點名
+    tpath = db.default_db_path().parent / "topic_tips.json"
+    tips = json.loads(tpath.read_text(encoding="utf-8")) if tpath.exists() else {}
+
     detail: dict[str, dict] = {}
 
     def entry_topic(idd, label, mcq_y, ess_y):
@@ -145,7 +149,8 @@ def assemble(conn) -> dict:
             det[str(y)] = m + e
         detail[idd] = det
         total = sum(yy["count"] for yy in years)
-        return {"id": idd, "label": label, "years": years, "total": total, "examined": total > 0}
+        return {"id": idd, "label": label, "years": years, "total": total,
+                "examined": total > 0, "tip": tips.get(label, "")}
 
     sl1 = []
     for it in _SL1_MAP:
@@ -173,7 +178,7 @@ def assemble(conn) -> dict:
         years = [{"year": y, "count": len(by_year[y]), "essay": True} for y in sorted(by_year)]
         total = sum(len(v) for v in by_year.values())
         return {"id": idd, "label": label, "years": years, "total": total,
-                "examined": total > 0, "recurring": total >= 2}
+                "examined": total > 0, "recurring": total >= 2, "tip": tips.get(label, "")}
 
     by_subject: dict[str, list] = {}
     for canon, by_year in ess_canon.items():
@@ -316,6 +321,11 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .label{flex:0 0 280px;font-size:15px;cursor:pointer;line-height:1.5;}
 .row:hover .label{color:var(--blue);}
 .row.recur .label{font-weight:600;}
+/* 年表右側「一句話記法」：填滿圈圈右邊空白，掃過去複習重點；點它＝點該列開抽屜 */
+.tip{flex:1;min-width:0;padding-left:14px;margin-left:4px;border-left:1px solid #f0f0f3;
+ font-size:12px;line-height:1.55;color:#86868b;letter-spacing:0;cursor:pointer;}
+.row:hover .tip{color:#6e6e73;}
+@media(max-width:820px){.tip{display:none;}}
 .circs{display:flex;flex-wrap:wrap;gap:7px;align-items:center;}
 .circ{position:relative;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;
  font-size:13px;font-weight:700;cursor:pointer;transition:transform .08s;box-shadow:0 1px 2px rgba(0,0,0,.12);}
@@ -513,7 +523,8 @@ function rows(items,recur){
   const sorted=[...items].sort((a,b)=>latestYr(b)-latestYr(a)||b.total-a.total);
   return sorted.map(t=>`<div class="row${recur&&t.recurring?' recur':''}">
     <span class="label" data-id="${esc(t.id)}">${esc(t.label)}</span>
-    <span class="circs">${circles(t)}</span></div>`).join('');
+    <span class="circs">${circles(t)}</span>
+    ${t.tip?`<span class="tip" data-id="${esc(t.id)}">${esc(t.tip)}</span>`:''}</div>`).join('');
 }
 function subjectCard(tab,sub){
   if(tab==='sl1'){
@@ -669,7 +680,7 @@ document.addEventListener('click',e=>{
   const b=e.target.closest('.sbtn'); if(b){selectSubject(b.dataset.tab, b.dataset.i==='uncov'?'uncov':+b.dataset.i);return;}
   const tm=e.target.closest('.tmcell[data-id]'); if(tm){openDrawer(tm.dataset.id,null);return;}
   const c=e.target.closest('.circ[data-id]'); if(c){openDrawer(c.dataset.id,c.dataset.year);return;}
-  const l=e.target.closest('.label[data-id]'); if(l){openDrawer(l.dataset.id,null);}
+  const l=e.target.closest('.label[data-id],.tip[data-id]'); if(l){openDrawer(l.dataset.id,null);}
 });
 window.addEventListener('DOMContentLoaded',()=>{
   show('sl1');
