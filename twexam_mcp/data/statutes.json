@@ -62,6 +62,15 @@
     "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=175",
     "fetched": "2026-06-16"
   },
+  "中華民國刑法§221": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "221",
+    "content": "對於男女以強暴、脅迫、恐嚇、催眠術或其他違反其意願之方法而為性交者，處三年以上十年以下有期徒刑。前項之未遂犯罰之。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=221",
+    "fetched": "2026-06-16"
+  },
   "中華民國刑法§23": {
     "law": "中華民國刑法",
     "pcode": "C0000001",
@@ -69,6 +78,15 @@
     "content": "對於現在不法之侵害，而出於防衛自己或他人權利之行為，不罰。但防衛行為過當者，得減輕或免除其刑。",
     "status": "現行法規",
     "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=23",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§27": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "27",
+    "content": "已著手於犯罪行為之實行，而因己意中止或防止其結果之發生者，減輕或免除其刑。結果之不發生，非防止行為所致，而行為人已盡力為防止行為者，亦同。前項規定，於正犯或共犯中之一人或數人，因己意防止犯罪結果之發生，或結果之不發生，非防止行為所致，而行為人已盡力為防止行為者，亦適用之。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=27",
     "fetched": "2026-06-16"
   },
   "中華民國刑法§271": {
@@ -177,6 +195,15 @@
     "content": "一行為而觸犯數罪名者，從一重處斷。但不得科以較輕罪名所定最輕本刑以下之刑。",
     "status": "現行法規",
     "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=55",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§57": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "57",
+    "content": "科刑時應以行為人之責任為基礎，並審酌一切情狀，尤應注意下列事項，為科刑輕重之標準：一、犯罪之動機、目的。二、犯罪時所受之刺激。三、犯罪之手段。四、犯罪行為人之生活狀況。五、犯罪行為人之品行。六、犯罪行為人之智識程度。七、犯罪行為人與被害人之關係。八、犯罪行為人違反義務之程度。九、犯罪所生之危險或損害。十、犯罪後之態度。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=57",
     "fetched": "2026-06-16"
   }
 }
