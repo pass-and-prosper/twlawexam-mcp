@@ -53,6 +53,24 @@
     "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=16",
     "fetched": "2026-06-16"
   },
+  "中華民國刑法§164": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "164",
+    "content": "藏匿犯人或依法逮捕、拘禁之脫逃人或使之隱避者，處二年以下有期徒刑、拘役或一萬五千元以下罰金。意圖犯前項之罪而頂替者，亦同。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=164",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§168": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "168",
+    "content": "於執行審判職務之公署審判時或於檢察官偵查時，證人、鑑定人、通譯於案情有重要關係之事項，供前或供後具結，而為虛偽陳述者，處七年以下有期徒刑。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=168",
+    "fetched": "2026-06-16"
+  },
   "中華民國刑法§169": {
     "law": "中華民國刑法",
     "pcode": "C0000001",
