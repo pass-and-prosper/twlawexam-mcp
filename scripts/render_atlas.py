@@ -434,10 +434,25 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .lawlink:hover{text-decoration:underline;}
 .lawtext{font-size:15px;line-height:1.92;color:#3a3a3c;white-space:pre-wrap;}
 .lawmeta{font-size:11.5px;color:var(--muted);margin-top:7px;}
+/* 視圖切換（年表 ↔ 熱力圖）＋ 考點熱力圖 treemap */
+.vtoggle{margin-left:auto;display:flex;gap:6px;}
+.vbtn{font-size:12.5px;font-weight:600;padding:5px 13px;border-radius:980px;border:1px solid var(--line);
+ background:#fff;color:#3a3a3c;cursor:pointer;}
+.vbtn:hover{border-color:#c7c7cc;}
+.vbtn.on{background:var(--blue);color:#fff;border-color:var(--blue);}
+.treemap{position:relative;width:100%;aspect-ratio:1040/560;margin-top:6px;border-radius:12px;overflow:hidden;}
+.tmcell{position:absolute;border:2px solid #fff;border-radius:7px;overflow:hidden;cursor:pointer;
+ display:flex;align-items:center;justify-content:center;text-align:center;transition:filter .1s,transform .08s,box-shadow .1s;}
+.tmcell:hover{filter:brightness(1.07);z-index:3;transform:scale(1.015);box-shadow:0 3px 14px rgba(0,0,0,.22);}
+.tmlabel{padding:3px 4px;line-height:1.22;}
+.tmname{display:block;font-size:13px;font-weight:700;letter-spacing:-.02em;}
+.tmval{display:block;font-size:10.5px;font-weight:600;opacity:.85;margin-top:2px;}
+.tmval.only{font-size:12.5px;margin-top:0;}
 """
 
 _JS = """
 const $=s=>document.querySelector(s);
+let CUR_TAB='sl1',CUR_I=0,VIEW='list';   // 目前科目＋視圖（list 年表 / map 熱力圖）
 const BLUE={109:'#dcecfb',110:'#bcdcfa',111:'#94c6f6',112:'#5aa6f0',113:'#2f8be8',114:'#0a5fc2'};
 function esc(s){return (s+'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 // (1)文→(1) 文：學說/實務內嵌標號補空白＋上色，讀起來不擠
@@ -531,9 +546,53 @@ function renderUncov(){
   return `<div class="card ucard"><h3>🆕 題庫關鍵字未命中（${u.length}）</h3>
     <div class="meta">用「內容關鍵字」判斷，不信分類標籤。注意：原本誤判的『未考』多是分類把題目貼到鄰近標籤（如<b>國家賠償 19 題被歸成行政訴訟</b>），其實有考。此處僅列 109–114 題庫關鍵字也搜不到者（可能換句話說或本區間未出）。</div>${body}</div>`;
 }
+// 考點熱力圖：squarified treemap（方塊面積∝考過次數）。已用 node 驗過：面積成比例、不出界、不重疊、滿覆蓋。
+function squarify(values,x,y,w,h){
+  const sum=values.reduce((s,v)=>s+v.value,0); if(sum<=0||!values.length) return [];
+  const scale=(w*h)/sum, data=values.map(v=>({...v,_area:v.value*scale})), out=[];
+  let rx=x,ry=y,rw=w,rh=h,i=0,row=[];
+  const shortest=()=>Math.min(rw,rh), rowSum=r=>r.reduce((s,v)=>s+v._area,0);
+  function worst(r,side){if(!r.length)return Infinity;const s=rowSum(r),mx=Math.max(...r.map(v=>v._area)),mn=Math.min(...r.map(v=>v._area));return Math.max((side*side*mx)/(s*s),(s*s)/(side*side*mn));}
+  function flush(){const s=rowSum(row),thick=s/shortest();
+    if(rw>=rh){let cy=ry;row.forEach(v=>{const ch=(v._area/s)*rh;out.push({...v,x:rx,y:cy,w:thick,h:ch});cy+=ch;});rx+=thick;rw-=thick;}
+    else{let cx=rx;row.forEach(v=>{const cw=(v._area/s)*rw;out.push({...v,x:cx,y:ry,w:cw,h:thick});cx+=cw;});ry+=thick;rh-=thick;}
+    row=[];}
+  while(i<data.length){const side=shortest(),node=data[i];
+    if(!row.length){row.push(node);i++;continue;}
+    if(worst([...row,node],side)<=worst(row,side)){row.push(node);i++;}else flush();}
+  if(row.length)flush();
+  return out;
+}
+// 熱度配色：1 次→冷藍、最高頻→暖紅；越紅＝越該優先念
+function heatColor(v,max){const r=max>1?(v-1)/(max-1):1;return `hsl(${(210-210*r).toFixed(0)},68%,${(75-27*r).toFixed(0)}%)`;}
+function heatText(v,max){const r=max>1?(v-1)/(max-1):1;return (75-27*r)>58?'#1d1d1f':'#fff';}
+function topicsOf(tab,sub){
+  const arr = tab==='sl1' ? sub.groups.flatMap(g=>g.topics) : sub.issues;
+  return arr.filter(t=>t.total>0).map(t=>({id:t.id,label:t.label,value:t.total}));
+}
+function renderMap(tab,sub){
+  const items=topicsOf(tab,sub).sort((a,b)=>b.value-a.value);
+  if(!items.length) return subjectCard(tab,sub);   // 無題數退回年表
+  const W=1040,H=560,max=items[0].value,tot=items.reduce((s,i)=>s+i.value,0);
+  const cells=squarify(items,0,0,W,H).map(b=>{
+    const big=b.w>=66&&b.h>=36, med=b.w>=42&&b.h>=24;
+    const lbl=big?`<span class="tmname">${esc(b.label)}</span><span class="tmval">${b.value} 題</span>`
+            :(med?`<span class="tmval only">${b.value}</span>`:'');
+    return `<div class="tmcell" data-id="${esc(b.id)}" title="${esc(b.label)}：考過 ${b.value} 題"
+      style="left:${(b.x/W*100).toFixed(3)}%;top:${(b.y/H*100).toFixed(3)}%;width:${(b.w/W*100).toFixed(3)}%;height:${(b.h/H*100).toFixed(3)}%;background:${heatColor(b.value,max)};color:${heatText(b.value,max)}"><div class="tmlabel">${lbl}</div></div>`;
+  }).join('');
+  return `<div class="card"><h3>${esc(sub.subject)} · 考點熱力圖</h3>
+    <div class="meta">方塊大小＝考過次數（越大＝考越多）· 顏色越紅＝越高頻（越該優先念）· 共 ${items.length} 考點 / ${tot} 題 · 點方塊看歷年原題</div>
+    <div class="treemap">${cells}</div></div>`;
+}
 function selectSubject(tab,i){
+  CUR_TAB=tab; CUR_I=i;
   document.querySelectorAll('.sbtn').forEach(b=>b.classList.toggle('on', b.dataset.tab===tab && String(b.dataset.i)===String(i)));
-  $('#content').innerHTML = (i==='uncov') ? renderUncov() : subjectCard(tab, DATA[tab][i]);
+  $('#content').innerHTML = (i==='uncov') ? renderUncov()
+    : (VIEW==='map' ? renderMap(tab, DATA[tab][i]) : subjectCard(tab, DATA[tab][i]));
+  const lh=$('#leghint'); if(lh) lh.textContent = (VIEW==='map' && i!=='uncov')
+    ? '方塊大小＝考過次數 · 顏色越紅＝越高頻 · 點方塊看歷年原題'
+    : '圈內＝民國年 · 顏色越深＝年份越近 · ×N＝該年題數 · 點圈看該年原題';
   window.scrollTo(0,0);
 }
 function show(tab){
@@ -604,7 +663,11 @@ document.addEventListener('click',e=>{
       if(op.dataset.letter!==correct){op.classList.add('wrong');op.insertAdjacentHTML('beforeend','<span class="ck wrongck">✗ 你選的</span>');}
     }
     return;}
+  const v=e.target.closest('.vbtn'); if(v){VIEW=v.dataset.view;
+    document.querySelectorAll('.vbtn').forEach(x=>x.classList.toggle('on',x.dataset.view===VIEW));
+    selectSubject(CUR_TAB,CUR_I);return;}
   const b=e.target.closest('.sbtn'); if(b){selectSubject(b.dataset.tab, b.dataset.i==='uncov'?'uncov':+b.dataset.i);return;}
+  const tm=e.target.closest('.tmcell[data-id]'); if(tm){openDrawer(tm.dataset.id,null);return;}
   const c=e.target.closest('.circ[data-id]'); if(c){openDrawer(c.dataset.id,c.dataset.year);return;}
   const l=e.target.closest('.label[data-id]'); if(l){openDrawer(l.dataset.id,null);}
 });
@@ -651,8 +714,10 @@ def render(data: dict) -> str:
                        (s.get("untested", 0), "推測未考"), (s["total_q"], "題")]
     )
     legend = (
-        '<div class="legend"><span>圈內＝民國年 · 顏色越深＝年份越近 · '
-        '×N＝該年題數 · 點圈看該年原題</span></div>'
+        '<div class="legend"><span id="leghint">圈內＝民國年 · 顏色越深＝年份越近 · '
+        '×N＝該年題數 · 點圈看該年原題</span>'
+        '<span class="vtoggle"><button class="vbtn on" data-view="list">📋 年表</button>'
+        '<button class="vbtn" data-view="map">📊 熱力圖</button></span></div>'
     )
     return (
         '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">'
