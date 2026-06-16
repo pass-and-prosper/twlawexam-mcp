@@ -107,6 +107,15 @@
     "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=278",
     "fetched": "2026-06-16"
   },
+  "中華民國刑法§28": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "28",
+    "content": "二人以上共同實行犯罪之行為者，皆為正犯。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=28",
+    "fetched": "2026-06-16"
+  },
   "中華民國刑法§284": {
     "law": "中華民國刑法",
     "pcode": "C0000001",
@@ -123,6 +132,42 @@
     "content": "教唆他人使之實行犯罪行為者，為教唆犯。教唆犯之處罰，依其所教唆之罪處罰之。",
     "status": "現行法規",
     "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=29",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§30": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "30",
+    "content": "幫助他人實行犯罪行為者，為幫助犯。雖他人不知幫助之情者，亦同。幫助犯之處罰，得按正犯之刑減輕之。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=30",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§320": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "320",
+    "content": "意圖為自己或第三人不法之所有，而竊取他人之動產者，為竊盜罪，處五年以下有期徒刑、拘役或五十萬元以下罰金。意圖為自己或第三人不法之利益，而竊佔他人之不動產者，依前項之規定處斷。前二項之未遂犯罰之。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=320",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§328": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "328",
+    "content": "意圖為自己或第三人不法之所有，以強暴、脅迫、藥劑、催眠術或他法，至使不能抗拒，而取他人之物或使其交付者，為強盜罪，處五年以上有期徒刑。以前項方法得財產上不法之利益或使第三人得之者，亦同。犯強盜罪因而致人於死者，處死刑、無期徒刑或十年以上有期徒刑；致重傷者，處無期徒刑或七年以上有期徒刑。第一項及第二項之未遂犯罰之。預備犯強盜罪者，處一年以下有期徒刑、拘役或九千元以下罰金。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=328",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§330": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "330",
+    "content": "犯強盜罪而有第三百二十一條第一項各款情形之一者，處七年以上有期徒刑。前項之未遂犯罰之。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=330",
     "fetched": "2026-06-16"
   },
   "中華民國刑法§55": {
