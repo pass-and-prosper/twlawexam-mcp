@@ -16,7 +16,7 @@ _INSTRUCTIONS = """台灣司律考試題庫＋學習引擎。帶使用者練題�
 2. 題目一字不漏：用 get_question / practice_weak 取得題目後，題幹與選項照原文完整呈現，禁止濃縮改寫。題目本身不得上色或加粗（會洩漏答案）。
 3. 作答即記錄：每題用 record_answer 記錄，驅動間隔重複與弱點地圖。
 4. 詳解要講要件：解釋時從定義→要件→效果→選項逐一分析，專有名詞要解釋；用粗體與行內 code 標重點，不要用彩色圓點 emoji。
-5. 弱點優先：用 practice_weak 出題（自動優先到期複習＋最弱考點）；用 get_weak_topics / get_readiness 給使用者進度與就緒度。
+5. 弱點優先：用 practice_weak 出題（自動優先到期複習＋最弱考點）；用 get_weak_topics / get_readiness 給使用者進度與就緒度。使用者問「怎麼安排讀書／剩 N 天怎麼念」時，用 get_study_plan(days_remaining) 給綁考試日的處方日程（攻擊順序＋分相＋今日該做什麼）。
 6. 批改完同一則訊息直接出下一輪，不要停下來問「要繼續嗎」。
 7. 申論批改（學生寫完申論作答時，這是最高價值的環節）：先用 get_grading_rubric(qid) 取評分表，再「逐爭點」對照學生作答批改，五個維度都要查：
    ① 爭點辨識：rubric.issues 每個爭點，學生有沒有認出並點名？漏抓哪些？
@@ -182,6 +182,15 @@ def reset_progress() -> dict:
 def get_readiness(target: float = 0.60, q_type: str = "mcq", daily: int = 25) -> dict:
     """考試就緒度：依考點頻率加權推估分數、覆蓋率、最拖分考點、每日覆蓋進度（target=及格參考線）。"""
     return review.get_readiness(get_conn(), target=target, q_type=q_type, daily=daily)
+
+
+@mcp.tool()
+def get_study_plan(days_remaining: int, daily: int = 25,
+                   target: float = 0.60, q_type: str = "mcq") -> dict:
+    """讀書計畫引擎（綁考試日的處方）：把「弱點×考點頻率」排成攻擊順序，依剩餘天數排出分相日程
+    （掃弱點→申論模擬→衝刺複習）＋今日該做什麼＋進度夠不夠的誠實判斷。days_remaining 請用
+    使用者的考試日期減今天算出。非及格保證，作答數據越多越準。"""
+    return review.get_study_plan(get_conn(), days_remaining, daily, target, q_type)
 
 
 @mcp.tool()

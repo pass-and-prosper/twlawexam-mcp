@@ -13,6 +13,11 @@ def get_grading_rubric(conn, qid) -> dict:
     return db.get_grading_rubric(conn, qid)
 
 
+def get_study_plan(conn, days_remaining, daily=25, target=0.60, q_type="mcq") -> dict:
+    """讀書計畫：弱點×頻率排序＋剩餘天數 → 攻擊順序＋分相日程＋今日該做什麼。"""
+    return db.get_study_plan(conn, days_remaining, daily, target, q_type)
+
+
 def get_weak_topics(conn, q_type="mcq", min_attempts=1, limit=20) -> list[dict]:
     rows = db.get_weak_topics(conn, q_type, min_attempts, limit)
     return [

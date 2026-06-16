@@ -205,3 +205,24 @@ def test_grading_rubric_rejects_mcq(tmp_path):
     c.commit()
     assert review.get_grading_rubric(c, "113-sl1-民法-9")["error"] == "not_an_essay"
     c.close()
+
+
+# --- 讀書計畫引擎 (get_study_plan) ---
+
+def test_study_plan_phases_cover_all_days(conn):
+    # 分相日程：天數加總＝剩餘天數、第一相是掃弱點、帶今日該做與差距
+    _set_topic(conn, Q1, "民訴", "訴訟要件")
+    p = db.get_study_plan(conn, 30, target=0.60)
+    assert p["days_remaining"] == 30
+    assert sum(ph["days"] for ph in p["phases"]) == 30        # 各相天數加總＝總天數
+    assert p["phases"][0]["phase"].startswith("①")           # 第一相＝掃弱點
+    assert "drill" in p["today_focus"]
+    assert 0.0 <= p["gap_to_target"] <= 1.0
+
+
+def test_study_plan_short_timeline_single_sprint(conn):
+    # 時間極短（≤2 天）→ 收斂成單一衝刺相
+    _set_topic(conn, Q1, "民訴", "訴訟要件")
+    p = db.get_study_plan(conn, 2)
+    assert len(p["phases"]) == 1
+    assert p["phases"][0]["days"] == 2

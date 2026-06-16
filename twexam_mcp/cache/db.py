@@ -1027,3 +1027,70 @@ def get_readiness(conn, target=0.60, q_type="mcq", min_attempts=2, daily=25) -> 
         "days_to_cover": (backlog + daily - 1) // daily if daily else None,
         "top_drags": drags[:8],
     }
+
+
+def get_study_plan(conn, days_remaining, daily=25, target=0.60, q_type="mcq") -> dict:
+    """處方型讀書計畫：把 get_readiness 算好的弱點×頻率排序(top_drags)＋剩餘天數，排成
+    『先攻哪些考點 → 何時進申論模擬 → 何時衝刺複習』的可執行日程。非及格保證，數據越多越準。
+    days_remaining 由 client 依使用者考試日減今天算出後傳入。"""
+    days = max(1, int(days_remaining))
+    r = get_readiness(conn, target=target, q_type=q_type, daily=daily)
+    if "error" in r:
+        return r
+    drags = r["top_drags"]                 # 已按 point_drag 由大到小（弱×高頻優先）＝攻擊順序
+    cover_days = r["days_to_cover"]        # 用目前每日量覆蓋待練題所需天數
+
+    cur = 1
+    def _rng(n):
+        nonlocal cur
+        if n <= 0:
+            return None
+        s, e = cur, cur + n - 1
+        cur = e + 1
+        return f"第 {s}–{e} 天" if e > s else f"第 {s} 天"
+
+    if days <= 2:                          # 時間極短 → 單一衝刺相
+        phases = [{"phase": "衝刺（時間極短）", "day_range": _rng(days), "days": days,
+                   "do": f"只攻 priority_topics 前 3 名高頻弱點，每天 {daily} 題＋1 題申論用 rubric 批改。"}]
+    else:                                  # ~55% 掃弱點 / 中段 申論模擬 / 末 ~15% 衝刺
+        p1 = max(1, days * 11 // 20)
+        p3 = max(1, days * 3 // 20)
+        p2 = max(0, days - p1 - p3)
+        phases = [{"phase": "① 掃弱點（選擇題）", "day_range": _rng(p1), "days": p1,
+                   "do": f"每天 {daily} 題，依 priority_topics 由上而下；用 practice_weak / "
+                         "practice_by_topic，做前先 get_topic_primer。"}]
+        r2 = _rng(p2)
+        if r2:
+            phases.append({"phase": "② 申論模擬", "day_range": r2, "days": p2,
+                           "do": "每天 1 題申論，寫完用 get_grading_rubric 逐爭點五維批改；"
+                                 "先讀該爭點 get_issue_primer 的辨識訊號。"})
+        r3 = _rng(p3)
+        if r3:
+            phases.append({"phase": "③ 衝刺複習", "day_range": r3, "days": p3,
+                           "do": "practice_weak 清到期複習＋重讀高頻爭點辨識訊號；只碰最高頻、不開新考點。"})
+
+    pace_ok = cover_days is None or cover_days <= days
+    return {
+        "days_remaining": days,
+        "daily_questions": daily,
+        "target": target,
+        "projected_score": r["projected_score"],
+        "gap_to_target": round(max(0.0, target - r["projected_score"]), 3),
+        "band": r["band"],
+        "coverage": r["coverage"],
+        "confidence": r["confidence"],
+        "pace": {
+            "backlog_questions": r["backlog_questions"],
+            "days_to_cover_backlog": cover_days,
+            "verdict": ("時間夠覆蓋待練題" if pace_ok else
+                        f"時間緊：覆蓋待練題需 {cover_days} 天 > 剩 {days} 天 → 提高每日量或只攻最高頻弱點"),
+        },
+        "priority_topics": drags,          # 攻擊順序（弱×高頻優先）
+        "phases": phases,
+        "today_focus": {
+            "drill": [d["topic_point"] for d in drags[:3]],
+            "note": ("今天先掃這幾個高頻弱點，再做 1 題申論模擬（寫完用 get_grading_rubric 批改）。"
+                     if drags else "目前無明顯弱點：維持 practice_weak 清複習即可。"),
+        },
+        "disclaimer": "計畫依目前作答數據推估，數據越多越準；非及格保證。",
+    }
