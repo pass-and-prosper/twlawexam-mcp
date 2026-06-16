@@ -1137,3 +1137,77 @@ def get_study_plan(conn, days_remaining, daily=25, target=0.60, q_type="mcq") ->
         },
         "disclaimer": "計畫依目前作答數據推估，數據越多越準；非及格保證。",
     }
+
+
+def _load_mcq_explanations() -> dict:
+    try:
+        raw = (resources.files("twexam_mcp.data") / "mcq_explanations.json").read_text(encoding="utf-8")
+        return json.loads(raw)
+    except FileNotFoundError:
+        return {}
+
+
+def get_error_diagnosis(conn, q_type="mcq", limit=30) -> dict:
+    """錯誤類型診斷素材：不只『正確率』，而是『為什麼錯』。回傳每筆答錯題帶——你（反覆）
+    選了哪個錯選項＋正解＋逐項詳解＋該題錯幾次＋考點，再加上『同考點群聚』訊號，供 client
+    LLM 歸納誤解類型（觀念混淆／掉陷阱／粗心），把錯題綁到誤解而非只看分數。"""
+    rows = conn.execute(
+        """SELECT a.qid, a.user_answer, a.answered_at
+           FROM prog.attempts a JOIN questions q ON q.qid = a.qid
+           WHERE a.is_correct = 0 AND q.q_type = ?
+           ORDER BY a.answered_at""", (q_type,)).fetchall()
+
+    per: dict[str, dict] = {}
+    for r in rows:
+        e = per.setdefault(r["qid"], {"picks": {}, "wrong_times": 0, "last": None})
+        pick = (r["user_answer"] or "").strip().upper()
+        e["picks"][pick] = e["picks"].get(pick, 0) + 1
+        e["wrong_times"] += 1
+        e["last"] = r["answered_at"]
+
+    ranked = sorted(per.items(), key=lambda kv: (-kv[1]["wrong_times"], kv[1]["last"] or ""))[:limit]
+    expl = _load_mcq_explanations()
+    errors, topic_agg = [], {}
+    for qid, e in ranked:
+        q = get_question(conn, qid)
+        if q is None:
+            continue
+        opts = q.options or []
+
+        def _txt(letter):
+            i = ord(letter) - 65 if letter and len(letter) == 1 else -1
+            return opts[i] if 0 <= i < len(opts) else None
+
+        top_pick = max(e["picks"], key=e["picks"].get)   # 反覆選的那個錯選項＝持續的誤解
+        errors.append({
+            "qid": qid, "topic_subject": q.topic_subject, "topic_point": q.topic_point,
+            "stem": (q.stem or "")[:180],
+            "wrong_times": e["wrong_times"],
+            "your_pick": top_pick, "your_pick_text": _txt(top_pick),
+            "correct": q.answer, "correct_text": _txt((q.answer or "").strip().upper()),
+            "explanation": expl.get(qid),
+        })
+        if q.topic_point:
+            ta = topic_agg.setdefault((q.topic_subject, q.topic_point), {"qids": 0, "wrong": 0})
+            ta["qids"] += 1
+            ta["wrong"] += e["wrong_times"]
+
+    systematic = sorted(
+        [{"topic_subject": k[0], "topic_point": k[1],
+          "wrong_questions": v["qids"], "total_wrong": v["wrong"]}
+         for k, v in topic_agg.items()],
+        key=lambda d: (-d["wrong_questions"], -d["total_wrong"]))[:10]
+
+    return {
+        "q_type": q_type,
+        "n_wrong_questions": len(errors),
+        "errors": errors,
+        "systematic_topics": systematic,   # 同考點重複錯＝系統性誤解，非粗心
+        "guide": [
+            "觀念混淆：把 A 概念當 B（時效中斷 vs 不完成、形成之訴 vs 給付之訴…）——看 your_pick_text 與 correct_text 差在哪個概念。",
+            "掉陷阱：選了最誘人的 distractor——對照 explanation 看該選項為何錯。",
+            "粗心：wrong_times=1 且該考點其他題都對（偶發、非系統）。",
+            "優先補：systematic_topics 與 wrong_times≥2 者＝觀念問題，先用 get_topic_primer / get_issue_primer 重讀再重練。",
+        ],
+        "disclaimer": "診斷依個人作答記錄；wrong_times≥2 或同考點群聚＝系統性誤解，非隨機。",
+    }

@@ -16,7 +16,7 @@ _INSTRUCTIONS = """台灣司律考試題庫＋學習引擎。帶使用者練題�
 2. 題目一字不漏：用 get_question / practice_weak 取得題目後，題幹與選項照原文完整呈現，禁止濃縮改寫。題目本身不得上色或加粗（會洩漏答案）。
 3. 作答即記錄：每題用 record_answer 記錄，驅動間隔重複與弱點地圖。
 4. 詳解要講要件：解釋時從定義→要件→效果→選項逐一分析，專有名詞要解釋；用粗體與行內 code 標重點，不要用彩色圓點 emoji。
-5. 弱點優先：用 practice_weak 出題（自動優先到期複習＋最弱考點）；用 get_weak_topics / get_readiness 給使用者進度與就緒度。使用者問「怎麼安排讀書／剩 N 天怎麼念」時，用 get_study_plan(days_remaining) 給綁考試日的處方日程（攻擊順序＋分相＋今日該做什麼）。
+5. 弱點優先：用 practice_weak 出題（自動優先到期複習＋最弱考點）；用 get_weak_topics / get_readiness 給使用者進度與就緒度。使用者問「怎麼安排讀書／剩 N 天怎麼念」時，用 get_study_plan(days_remaining) 給綁考試日的處方日程（攻擊順序＋分相＋今日該做什麼）。使用者問「我常錯什麼／哪裡弱」時，用 get_error_diagnosis 取錯題素材，歸納誤解類型（觀念混淆／掉陷阱／粗心）而非只報正確率，並對系統性誤解開重讀＋重練。
 6. 批改完同一則訊息直接出下一輪，不要停下來問「要繼續嗎」。
 7. 申論批改（學生寫完申論作答時，這是最高價值的環節）：先用 get_grading_rubric(qid) 取評分表，再「逐爭點」對照學生作答批改，五個維度都要查：
    ① 爭點辨識：rubric.issues 每個爭點，學生有沒有認出並點名？漏抓哪些？
@@ -151,6 +151,14 @@ def get_grading_rubric(qid: str) -> dict:
     ＋學說對立＋實務字號＋🔍辨識訊號／📐前置觀念＋滿分擬答＋五維評分準則。供你逐爭點對照
     學生作答給形成性回饋（爭點漏抓/要件未涵攝/學說未選邊/字號漏引/架構），不打硬分數。"""
     return review.get_grading_rubric(get_conn(), qid)
+
+
+@mcp.tool()
+def get_error_diagnosis(q_type: str = "mcq", limit: int = 30) -> dict:
+    """錯誤類型診斷（不只正確率，要『為什麼錯』）：回傳每筆答錯題帶——你反覆選的錯選項＋正解
+    ＋逐項詳解＋該題錯幾次＋考點，並標『同考點群聚』。據此歸納誤解類型：①觀念混淆（把A當B）
+    ②掉陷阱（選最誘人的錯選項）③粗心（偶發）。wrong_times≥2 或群聚＝系統性，優先補。"""
+    return review.get_error_diagnosis(get_conn(), q_type, limit)
 
 
 @mcp.tool()

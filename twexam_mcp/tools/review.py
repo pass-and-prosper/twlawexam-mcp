@@ -18,6 +18,11 @@ def get_study_plan(conn, days_remaining, daily=25, target=0.60, q_type="mcq") ->
     return db.get_study_plan(conn, days_remaining, daily, target, q_type)
 
 
+def get_error_diagnosis(conn, q_type="mcq", limit=30) -> dict:
+    """錯誤類型診斷：答錯題帶你選的錯選項＋正解＋詳解＋重複次數＋同考點群聚（供歸納誤解類型）。"""
+    return db.get_error_diagnosis(conn, q_type, limit)
+
+
 def get_weak_topics(conn, q_type="mcq", min_attempts=1, limit=20) -> list[dict]:
     rows = db.get_weak_topics(conn, q_type, min_attempts, limit)
     return [

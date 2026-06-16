@@ -226,3 +226,24 @@ def test_study_plan_short_timeline_single_sprint(conn):
     p = db.get_study_plan(conn, 2)
     assert len(p["phases"]) == 1
     assert p["phases"][0]["days"] == 2
+
+
+# --- 錯誤類型診斷 (get_error_diagnosis) ---
+
+def test_error_diagnosis_surfaces_repeated_wrong_pick(conn):
+    # Q1 正解 B；學生兩次都選 A（錯）→ 診斷標出反覆選的錯選項＋系統性考點
+    _set_topic(conn, Q1, "民訴", "時效")
+    db.record_answer(conn, Q1, "A", today="2026-01-01")
+    db.record_answer(conn, Q1, "A", today="2026-01-02")
+    d = db.get_error_diagnosis(conn, q_type="mcq")
+    assert d["n_wrong_questions"] == 1
+    err = d["errors"][0]
+    assert err["qid"] == Q1 and err["wrong_times"] == 2      # 反覆錯＝系統性
+    assert err["your_pick"] == "A" and err["correct"] == "B"
+    assert d["systematic_topics"][0]["topic_point"] == "時效"
+
+
+def test_error_diagnosis_excludes_correct_answers(conn):
+    _set_topic(conn, Q1, "民訴", "時效")
+    db.record_answer(conn, Q1, "B", today="2026-01-01")      # 答對
+    assert db.get_error_diagnosis(conn)["n_wrong_questions"] == 0
