@@ -269,9 +269,10 @@ def assemble(conn) -> dict:
     enrich_raw = json.loads(epath.read_text(encoding="utf-8")) if epath.exists() else {}
     enrich = {"e:" + canon: v for canon, v in enrich_raw.items()}
 
-    # 考點重點(primer) + 各題擬答(answers) — 依 canonical 爭點名手寫 markdown，bundled JSON
-    ppath = db.default_db_path().parent / "issue_primers.json"
-    primers_src = json.loads(ppath.read_text(encoding="utf-8")) if ppath.exists() else {}
+    # 考點重點(primer)+辨識訊號/前置觀念/擬答(answers)/紅框(focus) — 單一來源：DB issue_primers
+    # 表（main() 以 apply_issue_primers 從 issue_primers.json 載入）。MCP get_issue_primer 讀同一
+    # 張表，兩邊永不漂移。
+    primers_src = {r[0]: json.loads(r[1]) for r in conn.execute("SELECT issue, data FROM issue_primers")}
     primers: dict[str, str] = {}  # id('e:'+canon / 'm:'+topic) -> 渲染後的重點 HTML
     signals: dict[str, str] = {}  # id -> 辨識訊號 HTML（怎麼從題目認出在考這個）
     prereq: dict[str, str] = {}   # id -> 前置觀念 HTML（要先懂的定義／法理，非看一眼能推出）
@@ -280,10 +281,9 @@ def assemble(conn) -> dict:
     eapath = db.default_db_path().parent / "essay_answers.json"
     essay_answers = json.loads(eapath.read_text(encoding="utf-8")) if eapath.exists() else {}
 
-    # 一試考點重點（選擇題的「為什麼」）— 依考點名手寫 markdown，id='m:'+topic
-    mpath = db.default_db_path().parent / "mcq_primers.json"
-    mcq_primers = json.loads(mpath.read_text(encoding="utf-8")) if mpath.exists() else {}
-    for topic, md in mcq_primers.items():
+    # 一試考點重點（選擇題的「為什麼」）— 單一來源：DB topic_notes 表（與 MCP get_topic_primer
+    # 共用，依考點名 topic_point）。id='m:'+topic_point。
+    for topic, md in conn.execute("SELECT topic_point, primer FROM topic_notes"):
         if md:
             primers["m:" + topic] = _md_to_html(md)
 
@@ -911,6 +911,8 @@ def main(argv=None) -> int:
     db.init_schema(conn)         # 確保 ephemeral 表 schema 存在（CREATE IF NOT EXISTS，冪等）
     db.apply_issue_canon(conn)   # 重建 ephemeral 爭點正規化表（bundled issue_canon.json）
     db.apply_essay_issues(conn)  # 重建 ephemeral 爭點索引（bundled essay_issues.json）
+    db.apply_topic_notes(conn)   # 選擇題考點重點（單一來源；atlas 與 MCP get_topic_primer 共用）
+    db.apply_issue_primers(conn) # 申論爭點重點包（單一來源；atlas 與 MCP get_issue_primer 共用）
     data = assemble(conn)
     out.write_text(render(data), encoding="utf-8")
     s = data["summary"]

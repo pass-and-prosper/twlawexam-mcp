@@ -132,6 +132,15 @@ def init_schema(conn: sqlite3.Connection) -> None:
             updated_at    TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_canon ON issue_canon(canonical);
+
+        -- 申論「爭點」重點包: per-canonical-爭點 的 辨識訊號 / 前置觀念 / 考點重點 /
+        -- 滿分擬答 / 題幹紅框, bundled from issue_primers.json. SINGLE source for BOTH
+        -- the MCP get_issue_primer tool AND the 考點地圖 atlas, so they never drift.
+        CREATE TABLE IF NOT EXISTS issue_primers (
+            issue      TEXT PRIMARY KEY,   -- canonical 爭點名
+            data       TEXT NOT NULL,      -- 完整 JSON: {primer, signals, prereq, answers, focus}
+            updated_at TEXT
+        );
         """
     )
     conn.commit()
@@ -846,6 +855,54 @@ def apply_topic_notes(conn: sqlite3.Connection) -> int:
             )
             n += 1
     return n
+
+
+def apply_issue_primers(conn: sqlite3.Connection) -> int:
+    """Restore all 申論 爭點 重點包 (辨識訊號/前置觀念/考點重點/擬答/紅框) from the
+    bundled issue_primers.json into the DB. This makes issue_primers.json the SINGLE
+    source: the MCP get_issue_primer tool AND scripts/render_atlas.py both read this
+    one table, so the 辨識訊號 content can never live in only one place again."""
+    try:
+        raw = (resources.files("twexam_mcp.data") / "issue_primers.json").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return 0
+    mapping = json.loads(raw)
+    today = date.today().isoformat()
+    n = 0
+    with conn:
+        for canon, data in mapping.items():
+            conn.execute(
+                """INSERT INTO issue_primers (issue, data, updated_at) VALUES (?,?,?)
+                   ON CONFLICT(issue) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at""",
+                (canon, json.dumps(data, ensure_ascii=False), today),
+            )
+            n += 1
+    return n
+
+
+def get_issue_primer(conn, issue) -> dict:
+    """Fetch a 申論 爭點 的重點包: 辨識訊號(signals)/前置觀念(prereq)/考點重點(primer).
+
+    `issue` may be a canonical 爭點 name or a raw essay 爭點 string (resolved to its
+    canonical family via issue_canon). Fields are markdown; None if not yet written.
+    """
+    # Defensive: tolerate an older bank baked before this table existed.
+    if not conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='issue_primers'"
+    ).fetchone():
+        return {"issue": issue, "canon": None, "primer": None, "signals": None, "prereq": None}
+    canon = issue
+    row = conn.execute("SELECT data FROM issue_primers WHERE issue=?", (issue,)).fetchone()
+    if row is None:  # maybe a raw 爭點 string → resolve to its canonical family
+        r2 = conn.execute("SELECT canonical FROM issue_canon WHERE issue=?", (issue,)).fetchone()
+        if r2:
+            canon = r2[0]
+            row = conn.execute("SELECT data FROM issue_primers WHERE issue=?", (canon,)).fetchone()
+    if row is None:
+        return {"issue": issue, "canon": canon, "primer": None, "signals": None, "prereq": None}
+    d = json.loads(row[0])
+    return {"issue": issue, "canon": canon, "signals": d.get("signals"),
+            "prereq": d.get("prereq"), "primer": d.get("primer")}
 
 
 def get_readiness(conn, target=0.60, q_type="mcq", min_attempts=2, daily=25) -> dict:

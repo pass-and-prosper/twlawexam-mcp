@@ -17,3 +17,8 @@ def search_by_issue(conn, issue: str) -> list[dict]:
 def get_issues(conn, qid: str) -> list[dict]:
     """取某申論題拆出的所有爭點（爭點名＋學說＋實務）。"""
     return db.get_issues(conn, qid)
+
+
+def get_issue_primer(conn, issue: str) -> dict:
+    """取某申論爭點的重點包：辨識訊號＋前置觀念＋考點重點。"""
+    return db.get_issue_primer(conn, issue)

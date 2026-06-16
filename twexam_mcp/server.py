@@ -12,7 +12,7 @@ from twexam_mcp.tools import (
 # (desktop or the Claude mobile app via a remote connector) runs it the same way.
 _INSTRUCTIONS = """台灣司律考試題庫＋學習引擎。帶使用者練題時，務必遵守：
 
-1. 重點先行：開始練某考點前，先用 get_topic_primer 取該考點重點提示，讓使用者讀過再做題。
+1. 重點先行：開始練某考點前，先取重點提示讓使用者讀過再做題——選擇題考點用 get_topic_primer，申論爭點用 get_issue_primer（含🔍辨識訊號＋📐前置觀念：教使用者怎麼從事實認出爭點、要先懂哪些定義/法理）。
 2. 題目一字不漏：用 get_question / practice_weak 取得題目後，題幹與選項照原文完整呈現，禁止濃縮改寫。題目本身不得上色或加粗（會洩漏答案）。
 3. 作答即記錄：每題用 record_answer 記錄，驅動間隔重複與弱點地圖。
 4. 詳解要講要件：解釋時從定義→要件→效果→選項逐一分析，專有名詞要解釋；用粗體與行內 code 標重點，不要用彩色圓點 emoji。
@@ -190,6 +190,13 @@ def search_by_issue(issue: str) -> list[dict]:
 def get_issues(qid: str) -> list[dict]:
     """取某申論題拆出的所有爭點：爭點名＋學說對立＋實務見解（判例/決議/釋字/憲判字號）。"""
     return issues.get_issues(get_conn(), qid)
+
+
+@mcp.tool()
+def get_issue_primer(issue: str) -> dict:
+    """申論爭點重點包（做題前必讀）：🔍辨識訊號（怎麼從事實認出此爭點）＋📐前置觀念
+    （要先懂的定義/法理）＋考點重點。issue 可給標準爭點名或原始爭點字串（自動正規化）。"""
+    return issues.get_issue_primer(get_conn(), issue)
 
 
 def main() -> None:
