@@ -552,6 +552,9 @@ def main(argv=None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     out = Path(argv[0]) if argv else Path("topic-atlas.html")
     conn = db.connect(db.default_db_path())
+    db.init_schema(conn)         # 確保 ephemeral 表 schema 存在（CREATE IF NOT EXISTS，冪等）
+    db.apply_issue_canon(conn)   # 重建 ephemeral 爭點正規化表（bundled issue_canon.json）
+    db.apply_essay_issues(conn)  # 重建 ephemeral 爭點索引（bundled essay_issues.json）
     data = assemble(conn)
     out.write_text(render(data), encoding="utf-8")
     s = data["summary"]
