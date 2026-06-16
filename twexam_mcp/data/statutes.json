@@ -80,6 +80,15 @@
     "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=221",
     "fetched": "2026-06-16"
   },
+  "中華民國刑法§224": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "224",
+    "content": "對於男女以強暴、脅迫、恐嚇、催眠術或其他違反其意願之方法，而為猥褻之行為者，處六月以上五年以下有期徒刑。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=224",
+    "fetched": "2026-06-16"
+  },
   "中華民國刑法§23": {
     "law": "中華民國刑法",
     "pcode": "C0000001",
@@ -179,6 +188,15 @@
     "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=320",
     "fetched": "2026-06-16"
   },
+  "中華民國刑法§321": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "321",
+    "content": "犯前條第一項、第二項之罪而有下列情形之一者，處六月以上五年以下有期徒刑，得併科五十萬元以下罰金：一、侵入住宅或有人居住之建築物、船艦或隱匿其內而犯之。二、毀越門窗、牆垣或其他安全設備而犯之。三、攜帶兇器而犯之。四、結夥三人以上而犯之。五、乘火災、水災或其他災害之際而犯之。六、在車站、港埠、航空站或其他供水、陸、空公眾運輸之舟、車、航空機內而犯之。前項之未遂犯罰之。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=321",
+    "fetched": "2026-06-16"
+  },
   "中華民國刑法§328": {
     "law": "中華民國刑法",
     "pcode": "C0000001",
@@ -188,6 +206,15 @@
     "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=328",
     "fetched": "2026-06-16"
   },
+  "中華民國刑法§329": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "329",
+    "content": "竊盜或搶奪，因防護贓物、脫免逮捕或湮滅罪證，而當場施以強暴脅迫者，以強盜論。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=329",
+    "fetched": "2026-06-16"
+  },
   "中華民國刑法§330": {
     "law": "中華民國刑法",
     "pcode": "C0000001",
@@ -195,6 +222,15 @@
     "content": "犯強盜罪而有第三百二十一條第一項各款情形之一者，處七年以上有期徒刑。前項之未遂犯罰之。",
     "status": "現行法規",
     "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=330",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§332": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "332",
+    "content": "犯強盜罪而故意殺人者，處死刑或無期徒刑。犯強盜罪而有下列行為之一者，處死刑、無期徒刑或十年以上有期徒刑：一、放火者。二、強制性交者。三、擄人勒贖者。四、使人受重傷者。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=332",
     "fetched": "2026-06-16"
   },
   "中華民國刑法§55": {
