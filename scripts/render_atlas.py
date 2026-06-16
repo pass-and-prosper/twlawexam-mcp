@@ -451,7 +451,8 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .vbtn:hover{border-color:#c7c7cc;}
 .vbtn.on{background:var(--blue);color:#fff;border-color:var(--blue);}
 .treemap{position:relative;width:100%;aspect-ratio:1040/560;margin-top:6px;border-radius:12px;overflow:hidden;}
-.tmcell{position:absolute;border:2px solid #fff;border-radius:7px;overflow:hidden;cursor:pointer;
+.treemap{background:#f7f2ea;}
+.tmcell{position:absolute;border:2px solid #f7f2ea;border-radius:7px;overflow:hidden;cursor:pointer;
  display:flex;align-items:center;justify-content:center;text-align:center;transition:filter .1s,transform .08s,box-shadow .1s;}
 .tmcell:hover{filter:brightness(1.07);z-index:3;transform:scale(1.015);box-shadow:0 3px 14px rgba(0,0,0,.22);}
 .tmlabel{padding:3px 4px;line-height:1.22;}
@@ -574,9 +575,13 @@ function squarify(values,x,y,w,h){
   if(row.length)flush();
   return out;
 }
-// 熱度配色：1 次→冷藍、最高頻→暖紅；越紅＝越該優先念
-function heatColor(v,max){const r=max>1?(v-1)/(max-1):1;return `hsl(${(210-210*r).toFixed(0)},68%,${(75-27*r).toFixed(0)}%)`;}
-function heatText(v,max){const r=max>1?(v-1)/(max-1):1;return (75-27*r)>58?'#1d1d1f':'#fff';}
+// 熱度配色（編輯式暖階：象牙→沙→陶土→赭紅）。順序資料用單向色階（非彩虹）才正確且耐看；
+// 對數刻度＝題數偏態，讓中低頻也分得出層次。文字色依該格亮度自動切深赭/暖白以維持對比。
+const HEAT=[[245,238,229],[236,210,176],[223,165,120],[198,108,74],[150,53,47]];
+function heatT(v,max){return max>1?Math.log(v)/Math.log(max):1;}
+function heatRGB(t){t=Math.max(0,Math.min(1,t));const n=HEAT.length-1,x=t*n,i=Math.min(n-1,Math.floor(x)),f=x-i,a=HEAT[i],b=HEAT[i+1];return [0,1,2].map(k=>Math.round(a[k]+(b[k]-a[k])*f));}
+function heatColor(v,max){const[r,g,b]=heatRGB(heatT(v,max));return `rgb(${r},${g},${b})`;}
+function heatText(v,max){const[r,g,b]=heatRGB(heatT(v,max));return (0.299*r+0.587*g+0.114*b)>150?'#5a4031':'#fdf4ea';}
 function topicsOf(tab,sub){
   const arr = tab==='sl1' ? sub.groups.flatMap(g=>g.topics) : sub.issues;
   return arr.filter(t=>t.total>0).map(t=>({id:t.id,label:t.label,value:t.total}));
@@ -593,7 +598,7 @@ function renderMap(tab,sub){
       style="left:${(b.x/W*100).toFixed(3)}%;top:${(b.y/H*100).toFixed(3)}%;width:${(b.w/W*100).toFixed(3)}%;height:${(b.h/H*100).toFixed(3)}%;background:${heatColor(b.value,max)};color:${heatText(b.value,max)}"><div class="tmlabel">${lbl}</div></div>`;
   }).join('');
   return `<div class="card"><h3>${esc(sub.subject)} · 考點熱力圖</h3>
-    <div class="meta">方塊大小＝考過次數（越大＝考越多）· 顏色越紅＝越高頻（越該優先念）· 共 ${items.length} 考點 / ${tot} 題 · 點方塊看歷年原題</div>
+    <div class="meta">方塊大小＝考過次數（越大＝考越多）· 顏色越濃（赭紅）＝考越多（越該優先念）· 共 ${items.length} 考點 / ${tot} 題 · 點方塊看歷年原題</div>
     <div class="treemap">${cells}</div></div>`;
 }
 function selectSubject(tab,i){
@@ -602,7 +607,7 @@ function selectSubject(tab,i){
   $('#content').innerHTML = (i==='uncov') ? renderUncov()
     : (VIEW==='map' ? renderMap(tab, DATA[tab][i]) : subjectCard(tab, DATA[tab][i]));
   const lh=$('#leghint'); if(lh) lh.textContent = (VIEW==='map' && i!=='uncov')
-    ? '方塊大小＝考過次數 · 顏色越紅＝越高頻 · 點方塊看歷年原題'
+    ? '方塊大小＝考過次數 · 顏色越濃＝考越多 · 點方塊看歷年原題'
     : '圈內＝民國年 · 顏色越深＝年份越近 · ×N＝該年題數 · 點圈看該年原題';
   window.scrollTo(0,0);
 }
