@@ -525,21 +525,23 @@ function openDrawer(id,year){
     }
     const kind=q.essay?'申論':'選擇';
     const opts=q.options?optionsHtml(q.options,q.correct):'';  // 選擇題選項＋正解
-    // 擬答緊貼題目正下方（考選部評分標準·滿分申論結構）：單年抽屜逐題顯示
+    // 擬答緊貼題目正下方（同左欄）：考選部評分標準·滿分申論結構，單年抽屜逐題顯示
     const ans=(year&&q.answer)?`<div class="tag ans-t">擬答（依考選部評分標準·滿分結構）</div><div class="md ans">${q.answer}</div>`:'';
     return `<div class="q"><span class="yr">${q.year} 年</span><span class="qid">${esc(q.qid)} · ${kind}</span>
       <div class="stem">${formatStem(q.stem,q.focus)}</div>${opts}${ans}${ex}</div>`;
   }).join('')||'<p style="color:#86868b">（無資料）</p>';
-  // 參考資料（接在「題目＋擬答」之後）：enrich 後學說(含學者)/實務(具體字號)
+  // 右欄＝參考資料：enrich 後學說(含學者)/實務(字號) + 考點重點（擬答已移到左欄題目正下方）
   let enh='';
   if(en){
     if(en.doctrines&&en.doctrines.length) enh+=`<div class="tag doc-t">學說（含學者／標準說）</div>`+en.doctrines.map(d=>`<div class="di">${beautify(esc(d))}</div>`).join('');
     if(en.practice&&en.practice.length) enh+=`<div class="tag prac-t">實務（字號·已驗）</div><div class="pr">${en.practice.map(d=>beautify(esc(d))).join('｜')}</div>`;
   }
   const prim=(DATA.primers&&DATA.primers[id])?`<div class="primer"><div class="ptag">◆ 考點重點 ◆</div><div class="md">${DATA.primers[id]}</div></div>`:'';
-  const ref=(enh?`<div class="q"><div class="reftag">◆ 參考資料 · 學說／實務 ◆</div>${enh}</div>`:'')+prim;
-  // 單欄直式：題目 → 擬答（正下方）→ 參考資料(學說/實務/考點重點)；置中限寬好讀
-  $('#dbody').innerHTML = `<div class="solo">${qhtml}${ref}</div>`;
+  const right=(enh?`<div class="q">${enh}</div>`:'')+prim;
+  // 兩欄：左＝題目＋擬答（答案在題目正下方·同欄）；右＝參考資料(學說/實務/考點重點)；無參考則單欄置中
+  $('#dbody').innerHTML = right.trim()
+    ? `<div class="cols"><div class="col-q">${qhtml}</div><div class="col-a">${right}</div></div>`
+    : `<div class="solo">${qhtml}</div>`;
   $('#scrim').classList.add('on');$('#drawer').classList.add('on');
 }
 function closeDrawer(){$('#scrim').classList.remove('on');$('#drawer').classList.remove('on');}
