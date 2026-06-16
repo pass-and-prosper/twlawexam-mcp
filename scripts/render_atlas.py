@@ -273,6 +273,8 @@ def assemble(conn) -> dict:
     ppath = db.default_db_path().parent / "issue_primers.json"
     primers_src = json.loads(ppath.read_text(encoding="utf-8")) if ppath.exists() else {}
     primers: dict[str, str] = {}  # id('e:'+canon / 'm:'+topic) -> 渲染後的重點 HTML
+    signals: dict[str, str] = {}  # id -> 辨識訊號 HTML（怎麼從題目認出在考這個）
+    prereq: dict[str, str] = {}   # id -> 前置觀念 HTML（要先懂的定義／法理，非看一眼能推出）
 
     # 整題滿分擬答（per-qid，涵蓋該題全部當事人/爭點）；entry_canon 以此優先於 per-爭點 answers
     eapath = db.default_db_path().parent / "essay_answers.json"
@@ -285,6 +287,33 @@ def assemble(conn) -> dict:
         if md:
             primers["m:" + topic] = _md_to_html(md)
 
+    def _ut_weight(u):
+        """權重階梯：4 頂校期末考 > 3 頂校期刊 > 2 高普考+其他學術 > 1 研究推測。
+        頂校期末考=台大/政大/北大法律系考＋PTT考古題板；頂校期刊=台政北東自家學報。"""
+        src = u.get("source", "")
+        ls = u.get("ls_source", "") or ""
+        jr = u.get("journal_source", "") or ""
+        top_ls = (any(t in ls for t in ("台大", "臺大", "政大", "北大", "臺北大", "台北大"))
+                  or any(p in ls for p in ("PTT", "ptt", "批踢踢", "Examination")))
+        top_jr = any(j in jr for j in ("台大法學論叢", "臺大法學", "政大法學評論",
+                     "臺北大學法學論叢", "北大法學論叢", "東吳法律學報", "東吳法學"))
+        if src == "法律系考古題" and top_ls:
+            return 4
+        if src == "期刊論文" and top_jr:
+            return 3
+        if src in ("高普考領先", "法律系考古題", "期刊論文"):
+            return 2
+        return 1
+
+    def _ut_school(u):
+        txt = (u.get("ls_source", "") or "") + " " + (u.get("journal_source", "") or "")
+        for name, keys in (("台大", ("台大", "臺大")), ("政大", ("政大",)),
+                           ("北大", ("北大", "臺北大", "台北大")), ("東吳", ("東吳",)),
+                           ("中正", ("中正",)), ("海大", ("海洋大學",)), ("輔大", ("輔大",))):
+            if any(k in txt for k in keys):
+                return name
+        return ""
+
     sl2 = []
     n_untested = 0
     for ts in subj_keys:
@@ -295,6 +324,10 @@ def assemble(conn) -> dict:
             issues.append(entry_canon(pid, canon, by_year, pdata.get("answers"), pdata.get("focus")))
             if pdata.get("primer"):
                 primers[pid] = _md_to_html(pdata["primer"])
+            if pdata.get("signals"):
+                signals[pid] = _md_to_html(pdata["signals"])
+            if pdata.get("prereq"):
+                prereq[pid] = _md_to_html(pdata["prereq"])
         issues.sort(key=lambda x: (-x["total"], x["label"]))
         uts = []
         for j, u in enumerate(untested.get(ts, [])):
@@ -303,7 +336,8 @@ def assemble(conn) -> dict:
                             "doctrines": u.get("doctrines", []), "practice": u.get("practice", []),
                             "source": u.get("source", ""), "gk_source": u.get("gk_source", ""),
                             "ls_source": u.get("ls_source", ""), "journal_source": u.get("journal_source", "")}]
-            uts.append({"id": uid, "label": u["issue"], "source": u.get("source", "")})
+            uts.append({"id": uid, "label": u["issue"], "source": u.get("source", ""),
+                        "weight": _ut_weight(u), "school": _ut_school(u)})
         n_untested += len(uts)
         sl2.append({"subject": ts, "issues": issues, "untested": uts})
 
@@ -352,7 +386,7 @@ def assemble(conn) -> dict:
 
     return {
         "sl1": sl1, "sl2": sl2, "detail": detail, "uncovered_list": uncovered_list,
-        "primers": primers, "enrich": enrich,
+        "primers": primers, "signals": signals, "prereq": prereq, "enrich": enrich,
         "statutes": statutes, "law_refs": law_refs,
         "summary": {
             "mcq_topics": len(_all_syllabus_topics()),
@@ -482,6 +516,12 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .circ.pred.ls{background:#f0eafc;border-color:#cbb6ee;color:#7a4ad0;}
 .row.ut .label{color:#4a3a8c;}
 .row.ut:hover .label{color:#6a3df0;}
+.wt{font-size:12px;font-weight:700;letter-spacing:-1.5px;padding:4px 9px;border-radius:980px;white-space:nowrap;}
+.wt.t4{color:#fff;background:#c6353a;}
+.wt.t3{color:#fff;background:#e08a1e;}
+.wt.t2{color:#0a7d3c;background:#e6f6ec;border:1px solid #a5dcb9;}
+.wt.t1{color:#86868b;background:#f2f2f5;border:1px solid #e3e3e8;}
+.schtag{font-size:11px;font-weight:600;color:#5a4a8c;background:#efeafc;border:1px solid #d8ccf5;border-radius:980px;padding:3px 9px;}
 /* 擬答＝橘（行動·你要寫的） */
 .q .tag.ans-t{color:#e07b00;}
 .ans{font-size:16px;line-height:1.95;background:#fff6ea;border:1px solid #ffe2bd;border-left:3px solid #ff9500;
@@ -489,6 +529,13 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 /* 考點重點＝紫（要件 chunk 化、數字徽章好背） */
 .primer{margin-top:26px;background:#faf8ff;border:1px solid #e7defc;border-radius:16px;padding:18px 22px;box-shadow:0 1px 3px rgba(106,61,240,.06);}
 .primer .ptag{font-size:14px;font-weight:800;color:#6a3df0;letter-spacing:.06em;margin-bottom:12px;text-align:center;}
+/* 辨識訊號＝藍（怎麼認出在考這個）；前置觀念＝琥珀（要先懂的定義/法理） */
+.primer.sig{background:#eef5ff;border-color:#cfe0ff;box-shadow:0 1px 3px rgba(10,108,255,.06);}
+.primer.sig .ptag{color:#0a6cff;}
+.primer.sig .md h4{color:#0a52c9;}
+.primer.pre{background:#fff7ec;border-color:#ffe2bd;box-shadow:0 1px 3px rgba(255,149,0,.07);}
+.primer.pre .ptag{color:#c2710a;}
+.primer.pre .md h4{color:#9a5b00;}
 .md{font-size:15.5px;line-height:1.95;color:var(--ink);}
 .md h4{font-size:15.5px;font-weight:700;margin:16px 0 8px;color:#4a2db5;}
 .md h4:first-child{margin-top:0;}
@@ -591,6 +638,19 @@ function srcMeta(s){
   if(s==='期刊論文') return {b:'📚 期刊', c:'jr', bg:'#b8500a'};
   return {b:'🔮 推測', c:'', bg:'#7b5cff'};
 }
+function tierMeta(w){
+  return w===4?{stars:'★★★★',name:'頂校期末考',cls:'t4'}
+        :w===3?{stars:'★★★',name:'頂校期刊',cls:'t3'}
+        :w===2?{stars:'★★',name:'高普考/其他學術',cls:'t2'}
+        :{stars:'★',name:'研究推測',cls:'t1'};
+}
+function utRow(u){
+  const m=srcMeta(u.source), t=tierMeta(u.weight||1);
+  const sch=u.school?`<span class="schtag">${esc(u.school)}</span>`:'';
+  return `<div class="row ut">
+    <span class="label" data-id="${esc(u.id)}">${esc(u.label)}</span>
+    <span class="circs"><span class="wt ${t.cls}" title="${t.name}">${t.stars}</span>${sch}<span class="circ pred ${m.c}">${m.b}</span></span></div>`;
+}
 function circles(e){
   if(!e.examined) return '<span class="circ none">未考</span>';
   return e.years.map(y=>{
@@ -615,29 +675,34 @@ function subjectCard(tab,sub){
     return `<div class="card"><h3>${esc(sub.subject)}</h3><div class="meta">合計 ${tot} 題（選擇＋同考點申論）</div>${gs}</div>`;
   }
   const tot=sub.issues.reduce((a,i)=>a+i.total,0);
-  const rank=s=>s==='高普考領先'?0:s==='法律系考古題'?1:s==='期刊論文'?2:3;
-  const ut=[...(sub.untested||[])].sort((a,b)=>rank(a.source)-rank(b.source));
-  const utRows=ut.map(u=>{
-    const m=srcMeta(u.source);
-    return `<div class="row ut"><span class="label" data-id="${esc(u.id)}">${esc(u.label)}</span>
-      <span class="circs"><span class="circ pred ${m.c}">${m.b}</span></span></div>`;
-  }).join('');
-  const cnt=s=>ut.filter(u=>u.source===s).length;
-  const utSec=ut.length?`<div class="gname pred">🔮 還沒考過的重要爭點（${ut.length}：🔮研究${cnt('研究推測')}＋📈高普考${cnt('高普考領先')}＋🎓法律系${cnt('法律系考古題')}＋📚期刊${cnt('期刊論文')}，字號已驗）—— 點看學說/實務/為何可能考</div>${utRows}`:'';
+  const ut=[...(sub.untested||[])].sort((a,b)=>(b.weight||0)-(a.weight||0));
+  const wcnt=w=>ut.filter(u=>(u.weight||1)===w).length;
+  const utSec=ut.length?`<div class="gname pred">🔮 還沒考過的重要爭點（${ut.length}：★★★★頂校考${wcnt(4)}＋★★★頂校刊${wcnt(3)}＋★★高普/學術${wcnt(2)}＋★研究${wcnt(1)}）—— 依權重排序 · 點看學說/實務/為何可能考</div>${ut.map(utRow).join('')}`:'';
   return `<div class="card"><h3>${esc(sub.subject)}</h3>
     <div class="meta">${sub.issues.length} 個已考爭點 · ${tot} 題（申論）· 反覆考者粗體</div>${rows(sub.issues,true)}${utSec}</div>`;
 }
 function shortName(s){const m=s.match(/（(.+)）/);return m?m[1]:s;}
 function subjectBar(tab){
   const chips=DATA[tab].map((s,i)=>`<button class="sbtn" data-tab="${tab}" data-i="${i}">${esc(shortName(s.subject))}</button>`).join('');
-  return chips+`<button class="sbtn uc" data-tab="${tab}" data-i="uncov">🆕 未考過 ${DATA.uncovered_list.length}</button>`;
+  const utc=(DATA.sl2||[]).reduce((a,s)=>a+((s.untested||[]).length),0);
+  return chips+`<button class="sbtn uc" data-tab="${tab}" data-i="uncov">🆕 未考過 ${utc}</button>`;
 }
 function renderUncov(){
+  const subs=(DATA.sl2||[]).filter(s=>(s.untested||[]).length);
+  const all=subs.flatMap(s=>s.untested||[]);
+  const wcnt=w=>all.filter(u=>(u.weight||1)===w).length;
+  const secs=subs.map(s=>{
+    const ut=[...(s.untested||[])].sort((a,b)=>(b.weight||0)-(a.weight||0));
+    return `<div class="gname pred">${esc(shortName(s.subject))}（${ut.length}）</div>${ut.map(utRow).join('')}`;
+  }).join('');
   const u=DATA.uncovered_list||[];
-  const body=u.length?`<div class="pills">${u.map(t=>`<span class="upill">${esc(t)}</span>`).join('')}</div>`
-    :'<p style="color:#86868b;font-size:13px">（用內容關鍵字檢查，沒有確定未考的考點）</p>';
-  return `<div class="card ucard"><h3>🆕 題庫關鍵字未命中（${u.length}）</h3>
-    <div class="meta">用「內容關鍵字」判斷，不信分類標籤。注意：原本誤判的『未考』多是分類把題目貼到鄰近標籤（如<b>國家賠償 19 題被歸成行政訴訟</b>），其實有考。此處僅列 109–114 題庫關鍵字也搜不到者（可能換句話說或本區間未出）。</div>${body}</div>`;
+  const kw=u.length?`<div class="pills">${u.map(t=>`<span class="upill">${esc(t)}</span>`).join('')}</div>`
+    :'<p style="color:#86868b;font-size:13px">（無）</p>';
+  return `<div class="card ucard"><h3>🆕 還沒考過的重要爭點（${all.length}）</h3>
+    <div class="meta">重要但司律二試還沒考過 · 字號已驗 · 依權重排序：<b>★★★★頂校期末考</b>（台大/政大/北大＋PTT考古題）${wcnt(4)}　<b>★★★頂校期刊</b>（台政北東自家學報）${wcnt(3)}　<b>★★高普考＋其他學術</b> ${wcnt(2)}　<b>★研究推測</b> ${wcnt(1)} · 點爭點看學說/實務/為何可能考</div>
+    ${secs}
+    <div class="gname" style="margin-top:26px">📭 題庫關鍵字未命中（${u.length}）</div>
+    <div class="meta">用「內容關鍵字」判斷，不信分類標籤（如<b>國家賠償 19 題被誤歸行政訴訟</b>，其實有考）。此處僅列 109–114 關鍵字也搜不到者（可能換句話說或本區間未出）。</div>${kw}</div>`;
 }
 // 考點熱力圖：squarified treemap（方塊面積∝考過次數）。已用 node 驗過：面積成比例、不出界、不重疊、滿覆蓋。
 function squarify(values,x,y,w,h){
@@ -733,8 +798,11 @@ function openDrawer(id,year){
     if(en.doctrines&&en.doctrines.length) enh+=`<div class="tag doc-t">學說（含學者／標準說）</div>`+en.doctrines.map(d=>`<div class="di">${beautify(esc(d))}</div>`).join('');
     if(en.practice&&en.practice.length) enh+=`<div class="tag prac-t">實務（字號·已驗）</div><div class="pr">${en.practice.map(d=>beautify(esc(d))).join('｜')}</div>`;
   }
+  const sig=(DATA.signals&&DATA.signals[id])?`<div class="primer sig"><div class="ptag">◆ 辨識訊號 ◆</div><div class="md">${DATA.signals[id]}</div></div>`:'';
+  const pre=(DATA.prereq&&DATA.prereq[id])?`<div class="primer pre"><div class="ptag">◆ 前置觀念 ◆</div><div class="md">${DATA.prereq[id]}</div></div>`:'';
   const prim=(DATA.primers&&DATA.primers[id])?`<div class="primer"><div class="ptag">◆ 考點重點 ◆</div><div class="md">${DATA.primers[id]}</div></div>`:'';
-  const right=(enh?`<div class="q">${enh}</div>`:'')+prim;
+  // 學習順序：先「怎麼認出來」(辨識訊號)→再「要先懂什麼」(前置觀念)→學說/實務→考點重點
+  const right=sig+pre+(enh?`<div class="q">${enh}</div>`:'')+prim;
   // 法條抽屜（現行版）：本爭點用到的法條，置於抽屜最底、跨欄全寬；點連結看法規庫即時最新
   const lk=(DATA.law_refs&&DATA.law_refs[id])||[];
   const lawHtml=lk.length?`<div class="laws"><div class="lawhd">📜 本爭點用到的法條 · 現行版（點連結看法規庫最新）</div>`+
