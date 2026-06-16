@@ -112,25 +112,56 @@ def _md_to_html(md: str) -> str:
     return "\n".join(out)
 
 
+def _paper_of(subject: str) -> str | None:
+    """把雜亂的 subject 標籤正規化到 _SL1_MAP 的四份一試考卷名。
+
+    同一 topic_point（如「上訴」）跨民訴/刑訴兩份考卷時，用此把題目分流到正確考卷，
+    避免兩卷的同名考點合併計數。label 變體（「民法與民事訴訟法」vs「綜合法學（民法、民事訴訟法）」）
+    一律正規化到同一份考卷（屬同卷 → 仍合併，如「既判力」）。
+    """
+    s = subject or ""
+    if "刑" in s:
+        key = "刑法"
+    elif ("憲" in s) or ("行政" in s) or ("國際公法" in s) or ("國際私法" in s):
+        key = "憲法"
+    elif ("公司" in s) or ("票據" in s) or ("保險" in s) or ("證券" in s) or ("強制執行" in s):
+        key = "公司法"
+    elif "民" in s:
+        key = "民法"
+    else:
+        return None
+    for it in _SL1_MAP:
+        if key in it["subject"]:
+            return it["subject"]
+    return None
+
+
 def assemble(conn) -> dict:
     # 選擇題逐項詳解（答題後展開）— bundled JSON，key=qid，手寫 markdown
     xpath = db.default_db_path().parent / "mcq_explanations.json"
     mcq_expl = json.loads(xpath.read_text(encoding="utf-8")) if xpath.exists() else {}
 
     # questions by topic_point & year, split by 選擇/申論
-    mcq: dict[str, dict] = {}   # topic -> {year:[q]}
-    es_t: dict[str, dict] = {}  # topic -> {year:[q]}  (essays, by topic_point)
-    for qid, year, stem, tp, qtype, options, answer in conn.execute(
-        "SELECT qid, year, stem, topic_point, q_type, options, answer FROM questions WHERE topic_point IS NOT NULL"
+    mcq: dict[str, dict] = {}        # topic -> {year:[q]}（合併；非跨卷撞桶考點用）
+    mcq_split: dict[tuple, dict] = {}  # (考卷, topic) -> {year:[q]}（跨卷撞桶考點分流用）
+    es_t: dict[str, dict] = {}       # topic -> {year:[q]}  (essays, by topic_point)
+    for qid, year, stem, subject, tp, qtype, options, answer in conn.execute(
+        "SELECT qid, year, stem, subject, topic_point, q_type, options, answer "
+        "FROM questions WHERE topic_point IS NOT NULL"
     ):
-        bucket = es_t if qtype == "essay" else mcq
         entry = {"qid": qid, "year": year, "stem": stem, "essay": qtype == "essay"}
-        if qtype != "essay" and options:  # 選擇題：帶選項＋正解(letter，避開申論的 q.answer 擬答)
+        if qtype == "essay":
+            es_t.setdefault(tp, {}).setdefault(year, []).append(entry)
+            continue
+        if options:  # 選擇題：帶選項＋正解(letter，避開申論的 q.answer 擬答)
             entry["options"] = json.loads(options)
             entry["correct"] = answer
-        if qtype != "essay" and qid in mcq_expl:  # 該題有逐項詳解 → 渲染後掛上（答題後才顯示）
+        if qid in mcq_expl:  # 該題有逐項詳解 → 渲染後掛上（答題後才顯示）
             entry["explanation"] = _md_to_html(mcq_expl[qid])
-        bucket.setdefault(tp, {}).setdefault(year, []).append(entry)
+        mcq.setdefault(tp, {}).setdefault(year, []).append(entry)
+        paper = _paper_of(subject)
+        if paper:  # 同一 entry 物件同時進合併桶與分流桶（共用參照）
+            mcq_split.setdefault((paper, tp), {}).setdefault(year, []).append(entry)
 
     # doctrines/practice per essay qid (aggregate that essay's 爭點)
     dp: dict[str, dict] = {}
@@ -169,7 +200,7 @@ def assemble(conn) -> dict:
 
     detail: dict[str, dict] = {}
 
-    def entry_topic(idd, label, mcq_y, ess_y):
+    def entry_topic(idd, label, mcq_y, ess_y, tip=""):
         det, years = {}, []
         for y in sorted(set(mcq_y) | set(ess_y)):
             m, e = mcq_y.get(y, []), ess_y.get(y, [])
@@ -178,15 +209,30 @@ def assemble(conn) -> dict:
         detail[idd] = det
         total = sum(yy["count"] for yy in years)
         return {"id": idd, "label": label, "years": years, "total": total,
-                "examined": total > 0, "tip": tips.get(label, "")}
+                "examined": total > 0, "tip": tip}
+
+    # 跨卷撞桶考點：同一 topic_point 出現在 >1 份考卷 → 依考卷分流（民訴/刑訴「上訴」、民法/票據「時效」…）
+    papers_of: dict[str, set] = {}
+    for (paper, t) in mcq_split:
+        papers_of.setdefault(t, set()).add(paper)
+    collide = {t for t, ps in papers_of.items() if len(ps) > 1}
 
     sl1 = []
     for it in _SL1_MAP:
-        groups = [{"name": ss["name"],
-                   "topics": [entry_topic("m:" + t, t, mcq.get(t, {}), {})  # 一試只放選擇題
-                              for t in ss["topics"]]}
-                  for ss in it["sub_subjects"]]
-        sl1.append({"subject": it["subject"], "groups": groups})
+        paper = it["subject"]
+        groups = []
+        for ss in it["sub_subjects"]:
+            topics = []
+            for t in ss["topics"]:  # 一試只放選擇題
+                if t in collide:  # 撞桶 → 用考卷分流的桶＋考卷限定 id/tip（避免併計、跑錯抽屜）
+                    idd, mcq_y = f"m:{paper}:{t}", mcq_split.get((paper, t), {})
+                    tip = tips.get(f"{paper}::{t}", "")
+                else:
+                    idd, mcq_y = "m:" + t, mcq.get(t, {})
+                    tip = tips.get(t, "")
+                topics.append(entry_topic(idd, t, mcq_y, {}, tip))
+            groups.append({"name": ss["name"], "topics": topics})
+        sl1.append({"subject": paper, "groups": groups})
 
     def entry_canon(idd, label, by_year, answers=None, focus=None):
         answers = answers or {}

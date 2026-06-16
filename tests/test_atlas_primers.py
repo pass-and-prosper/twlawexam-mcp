@@ -8,7 +8,7 @@ import json
 
 from twexam_mcp.cache import db
 from twexam_mcp.models.question import Question
-from scripts.render_atlas import _md_to_html, assemble
+from scripts.render_atlas import _md_to_html, _paper_of, assemble
 
 
 # ---------- _md_to_html (pure) ----------
@@ -156,6 +156,37 @@ def test_assemble_attaches_mcq_primer(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "default_db_path", lambda: dbp)
     data = assemble(c)
     assert "<strong>意思表示</strong>" in data["primers"]["m:法律行為"]
+    c.close()
+
+
+def test_paper_of_normalizes_label_variants():
+    # subject 標籤雜亂 → 正規化到 _SL1_MAP 四份考卷；變體與正式名同卷
+    assert _paper_of("民法與民事訴訟法") == "綜合法學（民法、民事訴訟法）"
+    assert _paper_of("綜合法學（民法、民事訴訟法）") == "綜合法學（民法、民事訴訟法）"
+    assert _paper_of("刑法與刑事訴訟法") == "綜合法學（刑法、刑事訴訟法、法律倫理）"
+    # 連 db 裡被截斷的票據卷標籤也要歸到公司法卷
+    assert _paper_of("綜合法學（公司法、保險法、票據法、證券交易法、強制執行法、") \
+        == "綜合法學（公司法、保險法、票據法、證券交易法、強制執行法）"
+
+
+def test_assemble_splits_cross_paper_topic(tmp_path, monkeypatch):
+    # 同名 topic_point「上訴」跨民訴/刑訴兩卷 → 必須各自分流，不可合併計數、不可共用抽屜
+    dbp = tmp_path / "questions.db"
+    c = db.connect(dbp)
+    db.init_schema(c)
+    civ, crim = "綜合法學（民法、民事訴訟法）", "綜合法學（刑法、刑事訴訟法、法律倫理）"
+    db.upsert_question(c, Question(113, "sl1", civ, 1, "mcq", "民訴上訴題", ["a", "b", "c", "d"],
+                                   answer="A", topic_subject="民事訴訟法", topic_point="上訴"))
+    db.upsert_question(c, Question(113, "sl1", crim, 2, "mcq", "刑訴上訴題", ["a", "b", "c", "d"],
+                                   answer="A", topic_subject="刑事訴訟法", topic_point="上訴"))
+    c.commit()
+    monkeypatch.setattr(db, "default_db_path", lambda: dbp)
+    data = assemble(c)
+    civ_id, crim_id = f"m:{civ}:上訴", f"m:{crim}:上訴"
+    assert civ_id != crim_id
+    assert civ_id in data["detail"] and crim_id in data["detail"]
+    assert len(data["detail"][civ_id]["113"]) == 1   # 各 1 題，未合併成 2
+    assert len(data["detail"][crim_id]["113"]) == 1
     c.close()
 
 
