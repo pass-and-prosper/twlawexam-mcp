@@ -71,7 +71,7 @@ def _md_to_html(md: str) -> str:
         line = lines[i]
         if not line.strip():
             flush(); i += 1; continue
-        if re.match(r"^#{2,6}\s+", line):
+        if re.match(r"^#{1,6}\s+", line):
             flush(); out.append(f"<h4>{_md_inline(line.lstrip('#').strip())}</h4>"); i += 1; continue
         if re.match(r"^-{3,}\s*$", line):
             flush(); out.append("<hr>"); i += 1; continue
@@ -161,9 +161,13 @@ def assemble(conn) -> dict:
         rows = {str(y): list(by_year[y].values()) for y in by_year}  # by_year[y] is {qid:entry}
         for qs in rows.values():
             for q in qs:
-                if q["qid"] in answers:  # 各題擬答（單年抽屜才顯示，由 JS 控制）
+                # 擬答＝整題滿分擬答（per-qid，涵蓋該題全部當事人/爭點，該題每個爭點抽屜共用同一份）；
+                # essay_answers.json 缺者退回舊的 per-爭點擬答（民法尚未轉檔者之 fallback）
+                if q["qid"] in essay_answers:
+                    q["answer"] = _md_to_html(essay_answers[q["qid"]])
+                elif q["qid"] in answers:
                     q["answer"] = _md_to_html(answers[q["qid"]])
-                if q["qid"] in focus:    # 題幹要紅虛線框的關鍵句（該爭點觸發點）
+                if q["qid"] in focus:    # 題幹要紅虛線框的關鍵描述（該爭點觸發點·完整句）
                     q["focus"] = focus[q["qid"]]
         detail[idd] = rows
         years = [{"year": y, "count": len(by_year[y]), "essay": True} for y in sorted(by_year)]
@@ -190,6 +194,10 @@ def assemble(conn) -> dict:
     ppath = db.default_db_path().parent / "issue_primers.json"
     primers_src = json.loads(ppath.read_text(encoding="utf-8")) if ppath.exists() else {}
     primers: dict[str, str] = {}  # id('e:'+canon / 'm:'+topic) -> 渲染後的重點 HTML
+
+    # 整題滿分擬答（per-qid，涵蓋該題全部當事人/爭點）；entry_canon 以此優先於 per-爭點 answers
+    eapath = db.default_db_path().parent / "essay_answers.json"
+    essay_answers = json.loads(eapath.read_text(encoding="utf-8")) if eapath.exists() else {}
 
     # 一試考點重點（選擇題的「為什麼」）— 依考點名手寫 markdown，id='m:'+topic
     mpath = db.default_db_path().parent / "mcq_primers.json"
