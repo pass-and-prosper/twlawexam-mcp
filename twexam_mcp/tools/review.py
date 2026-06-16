@@ -8,6 +8,11 @@ def record_answer(conn, qid, answer=None, self_correct=None) -> dict:
     return db.record_answer(conn, qid, answer, self_correct)
 
 
+def get_grading_rubric(conn, qid) -> dict:
+    """申論批改評分表：爭點 checklist＋學說/實務＋辨識訊號/前置觀念＋滿分擬答（供逐項批改）。"""
+    return db.get_grading_rubric(conn, qid)
+
+
 def get_weak_topics(conn, q_type="mcq", min_attempts=1, limit=20) -> list[dict]:
     rows = db.get_weak_topics(conn, q_type, min_attempts, limit)
     return [

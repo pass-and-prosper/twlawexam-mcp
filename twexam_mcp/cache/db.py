@@ -905,6 +905,46 @@ def get_issue_primer(conn, issue) -> dict:
             "prereq": d.get("prereq"), "primer": d.get("primer")}
 
 
+def get_grading_rubric(conn, qid) -> dict:
+    """組裝一份申論「批改評分表」，供 client 端 LLM 對學生作答做形成性批改。
+
+    server 不呼叫 LLM——它只把批改一題申論所需的全部素材（爭點 checklist＋學說對立
+    ＋實務字號＋辨識訊號／前置觀念／考點重點＋滿分擬答）一次備齊，由 client LLM 逐爭點
+    對照學生作答給回饋。把「自評(self_correct)」升級成「有評分表的他評」。
+    """
+    q = get_question(conn, qid)
+    if q is None:
+        return {"error": "not_found", "qid": qid}
+    if q.q_type != "essay":
+        return {"error": "not_an_essay", "qid": qid}
+    checklist = []
+    for it in get_issues(conn, qid):           # 每個爭點掛上其 canon 的辨識/前置/重點
+        prim = get_issue_primer(conn, it["issue"])
+        checklist.append({
+            "issue_no": it.get("issue_no"),
+            "issue": it["issue"],
+            "doctrines": it.get("doctrines", []),   # 學說對立（應寫出並選邊說理）
+            "practice": it.get("practice", []),     # 實務字號（應引用）
+            "signals": prim.get("signals"),         # 🔍 辨識訊號（怎麼從事實認出）
+            "prereq": prim.get("prereq"),           # 📐 前置觀念（定義／法理）
+            "primer": prim.get("primer"),           # 考點重點
+        })
+    return {
+        "qid": qid,
+        "stem": q.stem,
+        "issues": checklist,
+        "model_answer": q.model_answer,             # 滿分擬答（對照標準）
+        "rubric": [
+            "爭點辨識：issues 清單每個爭點，學生有沒有認出並點名？漏抓哪些？",
+            "要件涵攝：法條要件有沒有逐一套到本案『具體事實』(非只抄定義/法條)？",
+            "學說操作：學說對立(doctrines)有沒有寫出、有沒有選邊並說理？",
+            "實務引用：該引的字號(practice)有沒有引到？引錯/漏引哪些？",
+            "答題架構：爭點順序、層次、先決問題關係清不清楚？",
+        ],
+        "disclaimer": "AI 擬答/批改為機器生成，非官方解答，僅供形成性學習回饋，不得作為應試依據。",
+    }
+
+
 def get_readiness(conn, target=0.60, q_type="mcq", min_attempts=2, daily=25) -> dict:
     """Frequency-weighted exam-readiness estimate.
 

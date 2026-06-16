@@ -18,6 +18,14 @@ _INSTRUCTIONS = """台灣司律考試題庫＋學習引擎。帶使用者練題�
 4. 詳解要講要件：解釋時從定義→要件→效果→選項逐一分析，專有名詞要解釋；用粗體與行內 code 標重點，不要用彩色圓點 emoji。
 5. 弱點優先：用 practice_weak 出題（自動優先到期複習＋最弱考點）；用 get_weak_topics / get_readiness 給使用者進度與就緒度。
 6. 批改完同一則訊息直接出下一輪，不要停下來問「要繼續嗎」。
+7. 申論批改（學生寫完申論作答時，這是最高價值的環節）：先用 get_grading_rubric(qid) 取評分表，再「逐爭點」對照學生作答批改，五個維度都要查：
+   ① 爭點辨識：rubric.issues 每個爭點，學生有沒有認出並點名？漏抓哪些？
+   ② 要件涵攝：法條要件有沒有套到本案『具體事實』(不是只抄定義/法條空轉)？
+   ③ 學說操作：doctrines 的學說對立有沒有寫出、有沒有選邊並說理？
+   ④ 實務引用：practice 的判例/釋字/憲判/決議字號，該引的有沒有引到？
+   ⑤ 答題架構：爭點順序、層次、先決問題關係清不清楚？
+   輸出格式：逐爭點標【✓全中／△部分／✗漏】＋具體缺漏與一句改進；最後給「最關鍵的 2 個提升點」。形成性回饋、不打硬分數。
+   批改完用 record_answer(qid, self_correct=…) 記錄（達到該題多數爭點即 True），驅動間隔重複，然後直接出下一題。
 """
 
 mcp = FastMCP("twexam", instructions=_INSTRUCTIONS)
@@ -135,6 +143,14 @@ def record_answer(qid: str, answer: str | None = None,
                   self_correct: bool | None = None) -> dict:
     """記錄一次作答並自動批改＋更新間隔重複排程。MCQ 自動對答案；申論可傳 self_correct 自評。"""
     return review.record_answer(get_conn(), qid, answer, self_correct)
+
+
+@mcp.tool()
+def get_grading_rubric(qid: str) -> dict:
+    """申論批改評分表（學生寫完申論作答後呼叫）：一次備齊批改該題所需素材——爭點 checklist
+    ＋學說對立＋實務字號＋🔍辨識訊號／📐前置觀念＋滿分擬答＋五維評分準則。供你逐爭點對照
+    學生作答給形成性回饋（爭點漏抓/要件未涵攝/學說未選邊/字號漏引/架構），不打硬分數。"""
+    return review.get_grading_rubric(get_conn(), qid)
 
 
 @mcp.tool()

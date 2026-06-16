@@ -1,5 +1,7 @@
 # tests/test_review.py
 """Weak-point engine: grading, spaced-repetition scheduling, mastery analytics."""
+import json
+
 from twexam_mcp.cache import db
 from twexam_mcp.models.question import Question
 from twexam_mcp.tools import review
@@ -153,3 +155,53 @@ def test_readiness_empty_is_cold_start(conn):
     assert r["coverage"] == 0.0
     assert r["confidence"] == "very_low"
     assert r["measured_accuracy"] is None
+
+
+# --- 申論批改評分表 (get_grading_rubric) ---
+
+def _seed_essay_with_issue(tmp_path):
+    c = db.connect(tmp_path / "q.db")
+    db.init_schema(c)
+    db.upsert_question(c, Question(
+        112, "sl2", "民法與民事訴訟法", 1, "essay", "甲對乙起訴，請求移轉A地……",
+        topic_subject="民法與民事訴訟法", topic_point="訴訟標的",
+        model_answer="**擬答**：本案應為對待給付判決……"))
+    qid = "112-sl2-民法與民事訴訟法-1"
+    c.execute("INSERT INTO essay_issues(qid,issue_no,issue,doctrines,practice,topic_subject) "
+              "VALUES(?,?,?,?,?,?)", (qid, 1, "形成性給付判決得否宣告假執行",
+              '["形成判決不得假執行說","給付判決得假執行說"]', '["民訴§389","民訴§390"]',
+              "民法與民事訴訟法"))
+    c.execute("INSERT INTO issue_primers(issue,data,updated_at) VALUES(?,?,?)",
+              ("形成性給付判決得否宣告假執行",
+               json.dumps({"signals": "## 🔍 辨識訊號\n**抗辯具形成訴訟性質**＝引爆點",
+                           "prereq": "## 📐 前置觀念\n訴訟三類型", "primer": "## 考點重點"},
+                          ensure_ascii=False), "2026-01-01"))
+    c.commit()
+    return c, qid
+
+
+def test_grading_rubric_assembles_checklist(tmp_path):
+    # 批改評分表：每個爭點掛上 學說/實務 + 辨識訊號/前置觀念，並帶滿分擬答與五維準則
+    c, qid = _seed_essay_with_issue(tmp_path)
+    r = review.get_grading_rubric(c, qid)
+    assert r["qid"] == qid
+    assert len(r["issues"]) == 1
+    it = r["issues"][0]
+    assert it["doctrines"] == ["形成判決不得假執行說", "給付判決得假執行說"]
+    assert it["practice"] == ["民訴§389", "民訴§390"]
+    assert "辨識訊號" in it["signals"] and "前置觀念" in it["prereq"]   # 爭點重點包掛上
+    assert r["model_answer"].startswith("**擬答")
+    assert len(r["rubric"]) == 5
+    c.close()
+
+
+def test_grading_rubric_rejects_mcq(tmp_path):
+    # 選擇題沒有申論批改評分表
+    c = db.connect(tmp_path / "q.db")
+    db.init_schema(c)
+    db.upsert_question(c, Question(
+        113, "sl1", "民法", 9, "mcq", "選擇題？", ["甲", "乙", "丙", "丁"],
+        answer="A", topic_subject="民法", topic_point="法律行為"))
+    c.commit()
+    assert review.get_grading_rubric(c, "113-sl1-民法-9")["error"] == "not_an_essay"
+    c.close()
