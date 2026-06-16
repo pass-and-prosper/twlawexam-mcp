@@ -123,6 +123,23 @@ def test_assemble_mcq_includes_options_and_correct(tmp_path, monkeypatch):
     c.close()
 
 
+def test_assemble_attaches_mcq_primer(tmp_path, monkeypatch):
+    # 一試考點重點(選擇題的「為什麼」)：mcq_primers.json[topic] → primers['m:'+topic]
+    dbp = tmp_path / "questions.db"
+    c = db.connect(dbp)
+    db.init_schema(c)
+    db.upsert_question(c, Question(
+        113, "sl1", "民法與民事訴訟法", 9, "mcq", "關於法律行為，何者正確？",
+        ["甲", "乙", "丙", "丁"], answer="A", topic_subject="民法", topic_point="法律行為"))
+    c.commit()
+    (tmp_path / "mcq_primers.json").write_text(
+        json.dumps({"法律行為": "## 法律行為\n1. **意思表示**須健全。"}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(db, "default_db_path", lambda: dbp)
+    data = assemble(c)
+    assert "<strong>意思表示</strong>" in data["primers"]["m:法律行為"]
+    c.close()
+
+
 def test_assemble_no_primer_when_absent(tmp_path, monkeypatch):
     # 沒有 issue_primers.json 時不可炸，primers 為空 dict、題目無 answer
     c, dbp, qid = _seed_pursuit(tmp_path)

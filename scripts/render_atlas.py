@@ -186,7 +186,14 @@ def assemble(conn) -> dict:
     # 考點重點(primer) + 各題擬答(answers) — 依 canonical 爭點名手寫 markdown，bundled JSON
     ppath = db.default_db_path().parent / "issue_primers.json"
     primers_src = json.loads(ppath.read_text(encoding="utf-8")) if ppath.exists() else {}
-    primers: dict[str, str] = {}  # id('e:'+canon) -> 渲染後的重點 HTML
+    primers: dict[str, str] = {}  # id('e:'+canon / 'm:'+topic) -> 渲染後的重點 HTML
+
+    # 一試考點重點（選擇題的「為什麼」）— 依考點名手寫 markdown，id='m:'+topic
+    mpath = db.default_db_path().parent / "mcq_primers.json"
+    mcq_primers = json.loads(mpath.read_text(encoding="utf-8")) if mpath.exists() else {}
+    for topic, md in mcq_primers.items():
+        if md:
+            primers["m:" + topic] = _md_to_html(md)
 
     sl2 = []
     n_untested = 0
