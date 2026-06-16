@@ -1,4 +1,22 @@
 {
+  "中華民國刑法§13": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "13",
+    "content": "行為人對於構成犯罪之事實，明知並有意使其發生者，為故意。行為人對於構成犯罪之事實，預見其發生而其發生並不違背其本意者，以故意論。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=13",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§14": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "14",
+    "content": "行為人雖非故意，但按其情節應注意，並能注意，而不注意者，為過失。行為人對於構成犯罪之事實，雖預見其能發生而確信其不發生者，以過失論。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=14",
+    "fetched": "2026-06-16"
+  },
   "中華民國刑法§15": {
     "law": "中華民國刑法",
     "pcode": "C0000001",
@@ -6,6 +24,33 @@
     "content": "對於犯罪結果之發生，法律上有防止之義務，能防止而不防止者，與因積極行為發生結果者同。因自己行為致有發生犯罪結果之危險者，負防止其發生之義務。",
     "status": "現行法規",
     "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=15",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§16": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "16",
+    "content": "除有正當理由而無法避免者外，不得因不知法律而免除刑事責任。但按其情節，得減輕其刑。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=16",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§169": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "169",
+    "content": "意圖他人受刑事或懲戒處分，向該管公務員誣告者，處七年以下有期徒刑。意圖他人受刑事或懲戒處分，而偽造、變造證據，或使用偽造、變造之證據者，亦同。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=169",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§23": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "23",
+    "content": "對於現在不法之侵害，而出於防衛自己或他人權利之行為，不罰。但防衛行為過當者，得減輕或免除其刑。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=23",
     "fetched": "2026-06-16"
   },
   "中華民國刑法§271": {
@@ -42,6 +87,15 @@
     "content": "使人受重傷者，處五年以上十二年以下有期徒刑。犯前項之罪因而致人於死者，處無期徒刑或十年以上有期徒刑。第一項之未遂犯罰之。",
     "status": "現行法規",
     "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=278",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§284": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "284",
+    "content": "因過失傷害人者，處一年以下有期徒刑、拘役或十萬元以下罰金；致重傷者，處三年以下有期徒刑、拘役或三十萬元以下罰金。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=284",
     "fetched": "2026-06-16"
   },
   "中華民國刑法§29": {
