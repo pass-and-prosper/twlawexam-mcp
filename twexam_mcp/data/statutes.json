@@ -1,11 +1,11 @@
 {
-  "中華民國刑法§55": {
+  "中華民國刑法§15": {
     "law": "中華民國刑法",
     "pcode": "C0000001",
-    "no": "55",
-    "content": "一行為而觸犯數罪名者，從一重處斷。但不得科以較輕罪名所定最輕本刑以下之刑。",
+    "no": "15",
+    "content": "對於犯罪結果之發生，法律上有防止之義務，能防止而不防止者，與因積極行為發生結果者同。因自己行為致有發生犯罪結果之危險者，負防止其發生之義務。",
     "status": "現行法規",
-    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=55",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=15",
     "fetched": "2026-06-16"
   },
   "中華民國刑法§271": {
@@ -24,6 +24,42 @@
     "content": "因過失致人於死者，處五年以下有期徒刑、拘役或五十萬元以下罰金。",
     "status": "現行法規",
     "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=276",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§277": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "277",
+    "content": "傷害人之身體或健康者，處五年以下有期徒刑、拘役或五十萬元以下罰金。犯前項之罪，因而致人於死者，處無期徒刑或七年以上有期徒刑；致重傷者，處三年以上十年以下有期徒刑。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=277",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§278": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "278",
+    "content": "使人受重傷者，處五年以上十二年以下有期徒刑。犯前項之罪因而致人於死者，處無期徒刑或十年以上有期徒刑。第一項之未遂犯罰之。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=278",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§29": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "29",
+    "content": "教唆他人使之實行犯罪行為者，為教唆犯。教唆犯之處罰，依其所教唆之罪處罰之。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=29",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§55": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "55",
+    "content": "一行為而觸犯數罪名者，從一重處斷。但不得科以較輕罪名所定最輕本刑以下之刑。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=55",
     "fetched": "2026-06-16"
   }
 }
