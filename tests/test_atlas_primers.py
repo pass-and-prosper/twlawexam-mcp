@@ -81,14 +81,15 @@ def _seed_pursuit(tmp_path):
               "VALUES(?,?,?,?,?,?)", (qid, 1, "緊追權能否作為管轄例外", "[]", "[]", "海商法與海洋法"))
     c.execute("INSERT INTO issue_canon(issue, canonical, topic_subject) VALUES(?,?,?)",
               ("緊追權能否作為管轄例外", "緊追權之行使要件（UNCLOS第111條）", "海商法與海洋法"))
-    c.commit()
-    (tmp_path / "issue_primers.json").write_text(json.dumps({
-        "緊追權之行使要件（UNCLOS第111條）": {
+    # 申論爭點重點包現在是單一來源：DB issue_primers 表（assemble 從這張表讀，不再讀 JSON 檔）
+    c.execute("INSERT INTO issue_primers(issue, data, updated_at) VALUES(?,?,?)", (
+        "緊追權之行使要件（UNCLOS第111條）",
+        json.dumps({
             "primer": "## 要件\n1. **起追地點**：須在內水／領海內。",
             "answers": {qid: "**114-3（鄰接區18浬）** 核心：`§33` 移民管制可緊追。"},
             "focus": {qid: ["基線外18浬處"]},
-        }
-    }, ensure_ascii=False), encoding="utf-8")
+        }, ensure_ascii=False), "2026-01-01"))
+    c.commit()
     return c, dbp, qid
 
 
@@ -143,16 +144,16 @@ def test_assemble_mcq_includes_options_and_correct(tmp_path, monkeypatch):
 
 
 def test_assemble_attaches_mcq_primer(tmp_path, monkeypatch):
-    # 一試考點重點(選擇題的「為什麼」)：mcq_primers.json[topic] → primers['m:'+topic]
+    # 一試考點重點(選擇題的「為什麼」)：單一來源 DB topic_notes[topic] → primers['m:'+topic]
     dbp = tmp_path / "questions.db"
     c = db.connect(dbp)
     db.init_schema(c)
     db.upsert_question(c, Question(
         113, "sl1", "民法與民事訴訟法", 9, "mcq", "關於法律行為，何者正確？",
         ["甲", "乙", "丙", "丁"], answer="A", topic_subject="民法", topic_point="法律行為"))
+    c.execute("INSERT INTO topic_notes(topic_point, primer, updated_at) VALUES(?,?,?)",
+              ("法律行為", "## 法律行為\n1. **意思表示**須健全。", "2026-01-01"))
     c.commit()
-    (tmp_path / "mcq_primers.json").write_text(
-        json.dumps({"法律行為": "## 法律行為\n1. **意思表示**須健全。"}, ensure_ascii=False), encoding="utf-8")
     monkeypatch.setattr(db, "default_db_path", lambda: dbp)
     data = assemble(c)
     assert "<strong>意思表示</strong>" in data["primers"]["m:法律行為"]
@@ -225,9 +226,10 @@ def test_assemble_no_explanation_when_absent(tmp_path, monkeypatch):
 
 
 def test_assemble_no_primer_when_absent(tmp_path, monkeypatch):
-    # 沒有 issue_primers.json 時不可炸，primers 為空 dict、題目無 answer
+    # issue_primers 表為空時不可炸，primers 為空 dict、題目無 answer
     c, dbp, qid = _seed_pursuit(tmp_path)
-    (tmp_path / "issue_primers.json").unlink()
+    c.execute("DELETE FROM issue_primers")
+    c.commit()
     monkeypatch.setattr(db, "default_db_path", lambda: dbp)
     data = assemble(c)
     assert data["primers"] == {}
