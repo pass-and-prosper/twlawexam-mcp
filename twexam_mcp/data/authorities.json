@@ -1,1 +1,96 @@
-{}
+{
+  "釋字535": {
+    "type": "釋字",
+    "cite": "司法院釋字第535號",
+    "status": "現行有效",
+    "issue": "警察勤務條例臨檢規定——臨檢要件/程序/對違法臨檢之救濟",
+    "verified": "2026-06-16",
+    "source_url": "https://cons.judicial.gov.tw/docdata.aspx?fid=100&id=310716",
+    "note": "確認違法之訴＋提審救濟之憲法基礎（執行完畢之即時強制）。"
+  },
+  "釋字690": {
+    "type": "釋字",
+    "cite": "司法院釋字第690號",
+    "status": "現行有效",
+    "issue": "傳染病防治法強制隔離合憲（人身自由·正當法律程序）",
+    "verified": "2026-06-16",
+    "source_url": "https://cons.judicial.gov.tw/docdata.aspx?fid=100&id=310871"
+  },
+  "釋字774": {
+    "type": "釋字",
+    "cite": "司法院釋字第774號",
+    "status": "現行有效",
+    "issue": "都市計畫個別變更範圍外人民得提行政訴訟救濟（補充釋字156）",
+    "verified": "2026-06-16",
+    "source_url": "https://cons.judicial.gov.tw/docdata.aspx?fid=100&id=310955"
+  },
+  "釋字137": {
+    "type": "釋字",
+    "cite": "司法院釋字第137號",
+    "status": "現行有效",
+    "issue": "法官審判得就行政命令表示合法適當見解（不受拘束）",
+    "verified": "2026-06-16",
+    "source_url": "https://cons.judicial.gov.tw/docdata.aspx?fid=100&id=310318"
+  },
+  "釋字216": {
+    "type": "釋字",
+    "cite": "司法院釋字第216號",
+    "status": "現行有效",
+    "issue": "法官不受司法行政命令拘束；經裁判引用者當事人得聲請解釋（承釋字137）",
+    "verified": "2026-06-16",
+    "source_url": "https://cons.judicial.gov.tw/docdata.aspx?fid=100&id=310397"
+  },
+  "釋字509": {
+    "type": "釋字",
+    "cite": "司法院釋字第509號",
+    "status": "現行有效（經補充）",
+    "issue": "刑法誹謗罪合憲；行為人有相當理由確信為真實即不罰（真實惡意原則）",
+    "verified": "2026-06-16",
+    "source_url": "https://cons.judicial.gov.tw/docdata.aspx?fid=100&id=310690",
+    "note": "⚠ 已經 112憲判8 補充：改以『合理查證程序』為準，引用釋字509 時務必一併讀 112憲判8。"
+  },
+  "112憲判8": {
+    "type": "憲判",
+    "cite": "112年憲判字第8號【誹謗罪案（二）】",
+    "status": "現行有效",
+    "issue": "誹謗罪合理查證標準——經合理查證可合理相信為真即不罰；補充釋字509",
+    "verified": "2026-06-16",
+    "source_url": "https://cons.judicial.gov.tw/docdata.aspx?fid=38&id=340775",
+    "note": "取代釋字509『真實惡意』的舊框架，為現行誹謗判準。"
+  },
+  "112台上851": {
+    "type": "法院",
+    "cite": "最高法院112年度台上字第851號刑事判決",
+    "status": "現行有效",
+    "issue": "傷害致重傷——重傷認定（治療回復說）",
+    "verified": "2026-06-16",
+    "source_url": "https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&id=TPSM,112,台上,851,20230817,1",
+    "note": "刑事庭判決（非判例）；同號另有民事侵權判決，引用時註明刑事。"
+  },
+  "100台上1672": {
+    "type": "法院",
+    "cite": "最高法院100年度台上字第1672號民事判決",
+    "status": "現行有效",
+    "issue": "返還債權——公§223 董事與公司交易由監察人代表（否定說：不以董事會決議為必要）",
+    "verified": "2026-06-16",
+    "source_url": "https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&id=TPSV,100,台上,1672,20111006"
+  },
+  "73台上3292": {
+    "type": "法院",
+    "cite": "最高法院73年度台上字第3292號民事判決",
+    "status": "現行有效",
+    "issue": "所有權移轉登記——爭點效法理（前訴重要爭點判斷拘束後訴）",
+    "verified": "2026-06-16",
+    "source_url": "https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&id=TPSV,73,台上,3292,19840731,1",
+    "note": "原最高法院判例（民國73年）；2019 判例制度廢止後仍得作為裁判先例引用。"
+  },
+  "92台上1886": {
+    "type": "法院",
+    "cite": "最高法院92年度台上字第1886號民事裁定",
+    "status": "現行有效",
+    "issue": "代位權行使範圍（民§242）包括提起訴訟——代位之訴聲明構造",
+    "verified": "2026-06-16",
+    "source_url": "https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&id=TPSV,92,台上,1886,20030904",
+    "note": "94年度第13次民事庭會議選為判例；2019 判例制度廢止後仍得引用。"
+  }
+}
