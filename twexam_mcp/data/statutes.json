@@ -1,0 +1,29 @@
+{
+  "中華民國刑法§55": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "55",
+    "content": "一行為而觸犯數罪名者，從一重處斷。但不得科以較輕罪名所定最輕本刑以下之刑。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=55",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§271": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "271",
+    "content": "殺人者，處死刑、無期徒刑或十年以上有期徒刑。前項之未遂犯罰之。預備犯第一項之罪者，處二年以下有期徒刑。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=271",
+    "fetched": "2026-06-16"
+  },
+  "中華民國刑法§276": {
+    "law": "中華民國刑法",
+    "pcode": "C0000001",
+    "no": "276",
+    "content": "因過失致人於死者，處五年以下有期徒刑、拘役或五十萬元以下罰金。",
+    "status": "現行法規",
+    "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=C0000001&flno=276",
+    "fetched": "2026-06-16"
+  }
+}

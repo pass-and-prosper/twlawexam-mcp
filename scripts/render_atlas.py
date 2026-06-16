@@ -19,6 +19,9 @@ from pathlib import Path
 from twexam_mcp.cache import db
 from twexam_mcp.tools.exam_map import _SL1_MAP, _SL2_MAP, _all_syllabus_topics
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # 讓本檔當 script 或被 import 都找得到 statute_refs
+from statute_refs import extract_refs, SUBJECT_DEFAULT, stable_key
+
 
 # ── 手寫 markdown → 安全 HTML（考點重點 / 擬答用；不依賴外部套件）─────────────
 _MD_BOLD = re.compile(r"\*\*(.+?)\*\*")
@@ -243,9 +246,27 @@ def assemble(conn) -> dict:
                       if t not in tested and t not in essay_genres
                       and not any(_seen(k) for k in syn.get(t, [t]))]
 
+    # 法條（現行版）：抽每爭點 primer/擬答/enrich 的 §引用 → 對應 statutes.json
+    # 只收 statutes.json 已收錄者（解析已驗），未收錄者由 scripts/refresh_statutes.py 列出回填
+    spath = db.default_db_path().parent / "statutes.json"
+    statutes = json.loads(spath.read_text(encoding="utf-8")) if spath.exists() else {}
+    law_refs: dict[str, list] = {}
+    for canon, subj in canon_subject.items():
+        dl = SUBJECT_DEFAULT.get(subj)
+        src = primers_src.get(canon, {})
+        parts = [src.get("primer", "") or ""]
+        parts += list((src.get("answers") or {}).values())
+        en = enrich_raw.get(canon, {})
+        parts += en.get("doctrines", []) + en.get("practice", [])
+        keys = sorted({stable_key(l, a) for (l, a) in extract_refs("\n".join(parts), dl)
+                       if stable_key(l, a) in statutes})
+        if keys:
+            law_refs["e:" + canon] = keys
+
     return {
         "sl1": sl1, "sl2": sl2, "detail": detail, "uncovered_list": uncovered_list,
         "primers": primers, "enrich": enrich,
+        "statutes": statutes, "law_refs": law_refs,
         "summary": {
             "mcq_topics": len(_all_syllabus_topics()),
             "essay_issues": sum(len(s["issues"]) for s in sl2),
@@ -395,6 +416,16 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 /* 必背關鍵：粗體上黃螢光（記憶錨點） */
 .md strong{font-weight:700;background:linear-gradient(transparent 58%,#ffe79e 58%);padding:0 1px;border-radius:2px;}
 .md hr{border:none;border-top:1px solid #e7defc;margin:14px 0;}
+/* 法條抽屜（現行版）：抽屜最底、跨欄全寬 */
+.laws{max-width:1640px;margin:24px auto 0;padding-top:18px;border-top:1px dashed var(--line);}
+.lawhd{font-size:14px;font-weight:800;color:#6e6e73;letter-spacing:.05em;text-align:center;margin-bottom:14px;}
+.lawitem{background:#f7f8fa;border:1px solid var(--line);border-radius:14px;padding:13px 17px;margin:0 auto 10px;max-width:60em;}
+.lawno{display:flex;align-items:center;gap:9px;font-size:14.5px;color:var(--ink);margin-bottom:6px;flex-wrap:wrap;}
+.lawbadge{font-size:11.5px;font-weight:700;color:#0a7d3c;background:#e6f6ec;border:1px solid #a5dcb9;border-radius:980px;padding:1px 9px;}
+.lawlink{margin-left:auto;font-size:12.5px;color:var(--blue);text-decoration:none;}
+.lawlink:hover{text-decoration:underline;}
+.lawtext{font-size:15px;line-height:1.92;color:#3a3a3c;white-space:pre-wrap;}
+.lawmeta{font-size:11.5px;color:var(--muted);margin-top:7px;}
 """
 
 _JS = """
@@ -538,10 +569,21 @@ function openDrawer(id,year){
   }
   const prim=(DATA.primers&&DATA.primers[id])?`<div class="primer"><div class="ptag">◆ 考點重點 ◆</div><div class="md">${DATA.primers[id]}</div></div>`:'';
   const right=(enh?`<div class="q">${enh}</div>`:'')+prim;
+  // 法條抽屜（現行版）：本爭點用到的法條，置於抽屜最底、跨欄全寬；點連結看法規庫即時最新
+  const lk=(DATA.law_refs&&DATA.law_refs[id])||[];
+  const lawHtml=lk.length?`<div class="laws"><div class="lawhd">📜 本爭點用到的法條 · 現行版（點連結看法規庫最新）</div>`+
+    lk.map(k=>{const s=DATA.statutes&&DATA.statutes[k];if(!s)return '';
+      return `<div class="lawitem"><div class="lawno"><b>${esc(s.law)} §${esc(s.no)}</b>`+
+        `<span class="lawbadge">${esc(s.status||'')}</span>`+
+        `<a class="lawlink" href="${esc(s.source_url)}" target="_blank" rel="noopener">法規庫 ↗</a></div>`+
+        `<div class="lawtext">${esc(s.content)}</div>`+
+        `<div class="lawmeta">抓取於 ${esc(s.fetched||'')}（再查若條文異動即標更新）</div></div>`;
+    }).join('')+`</div>`:'';
   // 兩欄：左＝題目＋擬答（答案在題目正下方·同欄）；右＝參考資料(學說/實務/考點重點)；無參考則單欄置中
-  $('#dbody').innerHTML = right.trim()
+  const colsHtml = right.trim()
     ? `<div class="cols"><div class="col-q">${qhtml}</div><div class="col-a">${right}</div></div>`
     : `<div class="solo">${qhtml}</div>`;
+  $('#dbody').innerHTML = colsHtml + lawHtml;
   $('#scrim').classList.add('on');$('#drawer').classList.add('on');
 }
 function closeDrawer(){$('#scrim').classList.remove('on');$('#drawer').classList.remove('on');}
@@ -564,6 +606,32 @@ window.addEventListener('DOMContentLoaded',()=>{
   $('#scrim').onclick=closeDrawer; $('#dx').onclick=closeDrawer;
 });
 """
+
+
+def iter_issue_refs(conn):
+    """→ list[(canon, subject, set((法規,條號)))]：每申論爭點 primer/擬答/enrich 抽出的法條引用。
+
+    給 render（過濾已收錄者顯示）與 scripts/refresh_statutes.py（列缺漏/查過期）共用。
+    """
+    base = db.default_db_path().parent
+    def _load(name):
+        p = base / name
+        return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    primers_src, enrich_raw = _load("issue_primers.json"), _load("issue_enrich.json")
+    canon_subject = {}
+    for canon, ts in conn.execute(
+        """SELECT DISTINCT COALESCE(c.canonical, e.issue), e.topic_subject
+           FROM essay_issues e LEFT JOIN issue_canon c ON c.issue=e.issue"""):
+        canon_subject[canon] = ts
+    out = []
+    for canon, subj in canon_subject.items():
+        dl = SUBJECT_DEFAULT.get(subj)
+        src = primers_src.get(canon, {})
+        parts = [src.get("primer", "") or ""] + list((src.get("answers") or {}).values())
+        en = enrich_raw.get(canon, {})
+        parts += en.get("doctrines", []) + en.get("practice", [])
+        out.append((canon, subj, extract_refs("\n".join(parts), dl)))
+    return out
 
 
 def render(data: dict) -> str:
