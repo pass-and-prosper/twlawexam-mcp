@@ -29,6 +29,16 @@ _MD_CODE = re.compile(r"`([^`]+)`")
 _MD_LIST = re.compile(r"^(\s*)([-*]|\d+\.)\s+(.*)$")
 
 
+def _is_table_sep(s: str) -> bool:
+    """markdown 表格分隔列（如 |---|---| / | :-- | --: |）：只含 | - : 空白且至少一個 -、一個 |。"""
+    s = s.strip()
+    return "|" in s and "-" in s and set(s) <= set("|-: \t")
+
+
+def _md_cells(s: str) -> list[str]:
+    return [c.strip() for c in s.strip().strip("|").split("|")]
+
+
 def _md_inline(text: str) -> str:
     # 先 escape（安全紅線：使用者內容裡的尖角括號不可變裸標籤），再上行內標記
     t = html.escape(text, quote=False)
@@ -75,6 +85,18 @@ def _md_to_html(md: str) -> str:
             flush(); out.append(f"<h4>{_md_inline(line.lstrip('#').strip())}</h4>"); i += 1; continue
         if re.match(r"^-{3,}\s*$", line):
             flush(); out.append("<hr>"); i += 1; continue
+        if line.strip().startswith("|") and i + 1 < len(lines) and _is_table_sep(lines[i + 1]):
+            flush()
+            header = _md_cells(line)
+            i += 2  # 跳過表頭 + 分隔列
+            body = []
+            while i < len(lines) and lines[i].strip().startswith("|"):
+                body.append(_md_cells(lines[i])); i += 1
+            thead = "".join(f"<th>{_md_inline(h)}</th>" for h in header)
+            tbody = "".join("<tr>" + "".join(f"<td>{_md_inline(c)}</td>" for c in r) + "</tr>"
+                            for r in body)
+            out.append(f"<table><thead><tr>{thead}</tr></thead><tbody>{tbody}</tbody></table>")
+            continue
         if _MD_LIST.match(line):
             flush()
             items: list[tuple[int, bool, str]] = []
@@ -91,6 +113,10 @@ def _md_to_html(md: str) -> str:
 
 
 def assemble(conn) -> dict:
+    # 選擇題逐項詳解（答題後展開）— bundled JSON，key=qid，手寫 markdown
+    xpath = db.default_db_path().parent / "mcq_explanations.json"
+    mcq_expl = json.loads(xpath.read_text(encoding="utf-8")) if xpath.exists() else {}
+
     # questions by topic_point & year, split by 選擇/申論
     mcq: dict[str, dict] = {}   # topic -> {year:[q]}
     es_t: dict[str, dict] = {}  # topic -> {year:[q]}  (essays, by topic_point)
@@ -102,6 +128,8 @@ def assemble(conn) -> dict:
         if qtype != "essay" and options:  # 選擇題：帶選項＋正解(letter，避開申論的 q.answer 擬答)
             entry["options"] = json.loads(options)
             entry["correct"] = answer
+        if qtype != "essay" and qid in mcq_expl:  # 該題有逐項詳解 → 渲染後掛上（答題後才顯示）
+            entry["explanation"] = _md_to_html(mcq_expl[qid])
         bucket.setdefault(tp, {}).setdefault(year, []).append(entry)
 
     # doctrines/practice per essay qid (aggregate that essay's 爭點)
@@ -434,6 +462,13 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 /* 必背關鍵：粗體上黃螢光（記憶錨點） */
 .md strong{font-weight:700;background:linear-gradient(transparent 58%,#ffe79e 58%);padding:0 1px;border-radius:2px;}
 .md hr{border:none;border-top:1px solid #e7defc;margin:14px 0;}
+/* 表格（一句話記法／詳解／擬答皆可用）：紫線框、表頭淡紫、隔列斑馬 */
+.md table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px;}
+.md th,.md td{border:1px solid #e7defc;padding:7px 10px;text-align:left;line-height:1.65;vertical-align:top;}
+.md thead th{background:#f0eafc;color:#4a2db5;font-weight:700;white-space:nowrap;}
+.md tbody tr:nth-child(even){background:#faf8ff;}
+/* 答案解析框：作答後才出現（沿用紫色 primer 外觀，置於選項下方） */
+.mcq-exp{margin-top:14px;}
 /* 法條抽屜（現行版）：抽屜最底、跨欄全寬 */
 .laws{max-width:1640px;margin:24px auto 0;padding-top:18px;border-top:1px dashed var(--line);}
 .lawhd{font-size:14px;font-weight:800;color:#6e6e73;letter-spacing:.05em;text-align:center;margin-bottom:14px;}
@@ -639,10 +674,12 @@ function openDrawer(id,year){
     }
     const kind=q.essay?'申論':'選擇';
     const opts=q.options?optionsHtml(q.options,q.correct):'';  // 選擇題選項＋正解
+    // 逐項詳解：作答後才展開（守「先作答再揭示」鐵律），緊貼選項下方
+    const expl=q.explanation?`<div class="primer mcq-exp hidden"><div class="ptag">◆ 答案解析 ◆</div><div class="md">${q.explanation}</div></div>`:'';
     // 擬答緊貼題目正下方（同左欄）：考選部評分標準·滿分申論結構，單年抽屜逐題顯示
     const ans=(year&&q.answer)?`<div class="tag ans-t">擬答（依考選部評分標準·滿分結構）</div><div class="md ans">${q.answer}</div>`:'';
     return `<div class="q"><span class="yr">${q.year} 年</span><span class="qid">${esc(q.qid)} · ${kind}</span>
-      <div class="stem">${formatStem(q.stem,q.focus)}</div>${opts}${ans}${ex}</div>`;
+      <div class="stem">${formatStem(q.stem,q.focus)}</div>${opts}${expl}${ans}${ex}</div>`;
   }).join('')||'<p style="color:#86868b">（無資料）</p>';
   // 右欄＝參考資料：enrich 後學說(含學者)/實務(字號) + 考點重點（擬答已移到左欄題目正下方）
   let enh='';
@@ -677,6 +714,7 @@ document.addEventListener('click',e=>{
       const correct=box.dataset.correct; box.classList.add('answered');
       box.querySelectorAll('.opt').forEach(o=>{if(o.dataset.letter===correct){o.classList.add('ok');o.insertAdjacentHTML('beforeend','<span class="ck">✓ 正解</span>');}});
       if(op.dataset.letter!==correct){op.classList.add('wrong');op.insertAdjacentHTML('beforeend','<span class="ck wrongck">✗ 你選的</span>');}
+      const exp=op.closest('.q')&&op.closest('.q').querySelector('.mcq-exp'); if(exp) exp.classList.remove('hidden');  // 作答後展開逐項詳解
     }
     return;}
   const v=e.target.closest('.vbtn'); if(v){VIEW=v.dataset.view;

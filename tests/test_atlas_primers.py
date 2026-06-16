@@ -40,6 +40,25 @@ def test_md_hr():
     assert "<hr>" in _md_to_html("---")
 
 
+def test_md_table():
+    md = "| 情形 | 效果 |\n|---|---|\n| 契約 | 效力未定 |\n| 單獨行為 | 無效 |"
+    html = _md_to_html(md)
+    assert "<table>" in html
+    assert "<th>情形</th>" in html and "<th>效果</th>" in html
+    assert "<td>契約</td>" in html and "<td>效力未定</td>" in html
+
+
+def test_md_table_inline_markup_in_cells():
+    md = "| 條 | 效果 |\n| --- | --- |\n| `§83` | **有效** |"
+    html = _md_to_html(md)
+    assert "<code>§83</code>" in html and "<strong>有效</strong>" in html
+
+
+def test_md_hr_not_swallowed_as_table():
+    # 純 --- 仍是分隔線，不可被誤判成表格分隔列
+    assert "<hr>" in _md_to_html("前\n\n---\n\n後") and "<table>" not in _md_to_html("前\n\n---\n\n後")
+
+
 def test_md_escapes_html():
     # 安全紅線：使用者內容裡的尖角括號必須 escape，不可變成裸標籤
     out = _md_to_html("看 <script>alert(1)</script> 注意")
@@ -137,6 +156,40 @@ def test_assemble_attaches_mcq_primer(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "default_db_path", lambda: dbp)
     data = assemble(c)
     assert "<strong>意思表示</strong>" in data["primers"]["m:法律行為"]
+    c.close()
+
+
+def test_assemble_attaches_mcq_explanation(tmp_path, monkeypatch):
+    # 選擇題逐項詳解：mcq_explanations.json[qid] → detail 該題 entry["explanation"]（渲染後 HTML）
+    dbp = tmp_path / "questions.db"
+    c = db.connect(dbp)
+    db.init_schema(c)
+    db.upsert_question(c, Question(
+        113, "sl1", "民法與民事訴訟法", 9, "mcq", "關於法律行為，何者正確？",
+        ["甲", "乙", "丙", "丁"], answer="D", topic_subject="民法", topic_point="法律行為"))
+    qid = "113-sl1-民法與民事訴訟法-9"
+    c.commit()
+    (tmp_path / "mcq_explanations.json").write_text(
+        json.dumps({qid: "## 為什麼 D\n依 `§83` 詐術→**有效**。"}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(db, "default_db_path", lambda: dbp)
+    data = assemble(c)
+    q = data["detail"]["m:法律行為"]["113"][0]
+    assert "<code>§83</code>" in q["explanation"] and "<strong>有效</strong>" in q["explanation"]
+    c.close()
+
+
+def test_assemble_no_explanation_when_absent(tmp_path, monkeypatch):
+    # 沒有 mcq_explanations.json（或該題未收）時不可炸，entry 無 explanation 鍵
+    dbp = tmp_path / "questions.db"
+    c = db.connect(dbp)
+    db.init_schema(c)
+    db.upsert_question(c, Question(
+        113, "sl1", "民法與民事訴訟法", 9, "mcq", "關於法律行為，何者正確？",
+        ["甲", "乙", "丙", "丁"], answer="D", topic_subject="民法", topic_point="法律行為"))
+    c.commit()
+    monkeypatch.setattr(db, "default_db_path", lambda: dbp)
+    data = assemble(c)
+    assert "explanation" not in data["detail"]["m:法律行為"]["113"][0]
     c.close()
 
 
