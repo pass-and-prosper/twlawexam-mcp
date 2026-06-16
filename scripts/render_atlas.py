@@ -310,7 +310,8 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .cols{display:grid;grid-template-columns:minmax(0,40em) minmax(0,52em);gap:28px;justify-content:center;align-items:start;max-width:1640px;margin:0 auto;}
 .col-q,.col-a{min-width:0;}
 .col-q{position:sticky;top:0;align-self:start;}
-.solo{max-width:44em;margin:0 auto;}
+.solo{max-width:50em;margin:0 auto;}
+.reftag{font-size:13px;font-weight:800;color:#6e6e73;letter-spacing:.08em;text-align:center;margin:4px 0 14px;padding-top:16px;border-top:1px dashed var(--line);}
 @media(max-width:1080px){.cols{grid-template-columns:1fr;gap:0;}.col-q{position:static;}}
 .q{padding:18px 0;border-bottom:1px solid var(--line);}
 .q .yr{display:inline-block;font-size:13px;font-weight:700;color:#fff;background:var(--blue);padding:3px 11px;border-radius:980px;margin-right:9px;}
@@ -524,24 +525,21 @@ function openDrawer(id,year){
     }
     const kind=q.essay?'申論':'選擇';
     const opts=q.options?optionsHtml(q.options,q.correct):'';  // 選擇題選項＋正解
+    // 擬答緊貼題目正下方（考選部評分標準·滿分申論結構）：單年抽屜逐題顯示
+    const ans=(year&&q.answer)?`<div class="tag ans-t">擬答（依考選部評分標準·滿分結構）</div><div class="md ans">${q.answer}</div>`:'';
     return `<div class="q"><span class="yr">${q.year} 年</span><span class="qid">${esc(q.qid)} · ${kind}</span>
-      <div class="stem">${formatStem(q.stem,q.focus)}</div>${opts}${ex}</div>`;
+      <div class="stem">${formatStem(q.stem,q.focus)}</div>${opts}${ans}${ex}</div>`;
   }).join('')||'<p style="color:#86868b">（無資料）</p>';
-  // 擬答（單年抽屜，每題）→ 移到右欄「解析」
-  const ansHtml=year?qs.filter(q=>q.answer).map(q=>`<div class="tag ans-t">擬答</div><div class="md ans">${q.answer}</div>`).join(''):'';
-  // tested 爭點：enrich 後的學說(含學者)/實務(具體字號)
+  // 參考資料（接在「題目＋擬答」之後）：enrich 後學說(含學者)/實務(具體字號)
   let enh='';
   if(en){
     if(en.doctrines&&en.doctrines.length) enh+=`<div class="tag doc-t">學說（含學者／標準說）</div>`+en.doctrines.map(d=>`<div class="di">${beautify(esc(d))}</div>`).join('');
     if(en.practice&&en.practice.length) enh+=`<div class="tag prac-t">實務（字號·已驗）</div><div class="pr">${en.practice.map(d=>beautify(esc(d))).join('｜')}</div>`;
   }
-  const analysis=ansHtml+enh;  // 需 .q 祖先讓 .tag/.di/.pr 樣式生效
   const prim=(DATA.primers&&DATA.primers[id])?`<div class="primer"><div class="ptag">◆ 考點重點 ◆</div><div class="md">${DATA.primers[id]}</div></div>`:'';
-  const right=(analysis?`<div class="q">${analysis}</div>`:'')+prim;
-  // 全螢幕配版：有解析 → 左欄題目／右欄解析(擬答+學說實務+考點重點)；無解析 → 單欄置中限寬好讀
-  $('#dbody').innerHTML = right.trim()
-    ? `<div class="cols"><div class="col-q">${qhtml}</div><div class="col-a">${right}</div></div>`
-    : `<div class="solo">${qhtml}</div>`;
+  const ref=(enh?`<div class="q"><div class="reftag">◆ 參考資料 · 學說／實務 ◆</div>${enh}</div>`:'')+prim;
+  // 單欄直式：題目 → 擬答（正下方）→ 參考資料(學說/實務/考點重點)；置中限寬好讀
+  $('#dbody').innerHTML = `<div class="solo">${qhtml}${ref}</div>`;
   $('#scrim').classList.add('on');$('#drawer').classList.add('on');
 }
 function closeDrawer(){$('#scrim').classList.remove('on');$('#drawer').classList.remove('on');}
