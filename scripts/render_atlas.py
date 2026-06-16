@@ -306,10 +306,11 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .drawer .x{border:none;background:#e8e8ed;border-radius:50%;width:32px;height:32px;font-size:17px;cursor:pointer;color:#3a3a3c;flex:0 0 auto;}
 .drawer .body{overflow:auto;padding:14px 30px 46px;}
 /* 全螢幕配版：題目｜解析 兩欄；窄螢幕收成單欄 */
-.cols{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:30px;align-items:start;max-width:1700px;margin:0 auto;}
+/* 左欄貼齊題目寬(~40em)消中間空白；右欄加寬(~52em)好讀；整體置中、外側吸收餘白 */
+.cols{display:grid;grid-template-columns:minmax(0,40em) minmax(0,52em);gap:28px;justify-content:center;align-items:start;max-width:1640px;margin:0 auto;}
 .col-q,.col-a{min-width:0;}
 .col-q{position:sticky;top:0;align-self:start;}
-.solo{max-width:1040px;margin:0 auto;}
+.solo{max-width:44em;margin:0 auto;}
 @media(max-width:1080px){.cols{grid-template-columns:1fr;gap:0;}.col-q{position:static;}}
 .q{padding:18px 0;border-bottom:1px solid var(--line);}
 .q .yr{display:inline-block;font-size:13px;font-weight:700;color:#fff;background:var(--blue);padding:3px 11px;border-radius:980px;margin-right:9px;}
@@ -331,11 +332,11 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
  font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;}
 .q .stem .st-q-single{margin-top:2px;padding:13px 17px;background:#fbfbfd;
  border:1px solid #ececf0;border-radius:14px;line-height:1.95;}
-.q .tag{font-size:12.5px;font-weight:800;color:#6e6e73;margin-top:14px;letter-spacing:.02em;}
+.q .tag{font-size:13px;font-weight:800;color:#6e6e73;margin-top:20px;letter-spacing:.02em;}
 .q .tag.doc-t{color:#0a6cff;}      /* 學說＝藍 */
 .q .tag.prac-t{color:#1b9e57;}     /* 實務＝綠 */
-.q .di{font-size:14.5px;line-height:1.85;background:#eef4ff;border-left:3px solid #0a6cff;border-radius:0 10px 10px 0;padding:10px 14px;margin:6px 0;}
-.q .pr{font-size:14px;line-height:1.8;background:#e9f8f0;border-left:3px solid #1b9e57;border-radius:0 10px 10px 0;padding:10px 14px;margin:6px 0;color:#0c6b3c;}
+.q .di{font-size:15.5px;line-height:1.95;background:#eef4ff;border-left:3px solid #0a6cff;border-radius:0 10px 10px 0;padding:11px 16px;margin:7px 0;}
+.q .pr{font-size:15px;line-height:1.9;background:#e9f8f0;border-left:3px solid #1b9e57;border-radius:0 10px 10px 0;padding:11px 16px;margin:7px 0;color:#0c6b3c;}
 /* 選擇題選項：正解綠底打勾 */
 .opts{margin-top:11px;display:flex;flex-direction:column;gap:7px;}
 .opthint{font-size:12px;color:#86868b;margin:0 0 3px 2px;}
@@ -369,12 +370,12 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .row.ut:hover .label{color:#6a3df0;}
 /* 擬答＝橘（行動·你要寫的） */
 .q .tag.ans-t{color:#e07b00;}
-.ans{font-size:15px;line-height:1.9;background:#fff6ea;border:1px solid #ffe2bd;border-left:3px solid #ff9500;
- border-radius:0 10px 10px 0;padding:12px 16px;margin-top:6px;}
+.ans{font-size:16px;line-height:1.95;background:#fff6ea;border:1px solid #ffe2bd;border-left:3px solid #ff9500;
+ border-radius:0 10px 10px 0;padding:14px 18px;margin-top:6px;}
 /* 考點重點＝紫（要件 chunk 化、數字徽章好背） */
 .primer{margin-top:26px;background:#faf8ff;border:1px solid #e7defc;border-radius:16px;padding:18px 22px;box-shadow:0 1px 3px rgba(106,61,240,.06);}
 .primer .ptag{font-size:14px;font-weight:800;color:#6a3df0;letter-spacing:.06em;margin-bottom:12px;text-align:center;}
-.md{font-size:14.5px;line-height:1.9;color:var(--ink);}
+.md{font-size:15.5px;line-height:1.95;color:var(--ink);}
 .md h4{font-size:15.5px;font-weight:700;margin:16px 0 8px;color:#4a2db5;}
 .md h4:first-child{margin-top:0;}
 .md p{margin:9px 0;}
