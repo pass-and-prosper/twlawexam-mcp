@@ -306,7 +306,7 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .drawer .x{border:none;background:#e8e8ed;border-radius:50%;width:32px;height:32px;font-size:17px;cursor:pointer;color:#3a3a3c;flex:0 0 auto;}
 .drawer .body{overflow:auto;padding:14px 30px 46px;}
 /* 全螢幕配版：題目｜解析 兩欄；窄螢幕收成單欄 */
-.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:34px;align-items:start;max-width:1700px;margin:0 auto;}
+.cols{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:30px;align-items:start;max-width:1700px;margin:0 auto;}
 .col-q,.col-a{min-width:0;}
 .col-q{position:sticky;top:0;align-self:start;}
 .solo{max-width:1040px;margin:0 auto;}
@@ -314,7 +314,23 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .q{padding:18px 0;border-bottom:1px solid var(--line);}
 .q .yr{display:inline-block;font-size:13px;font-weight:700;color:#fff;background:var(--blue);padding:3px 11px;border-radius:980px;margin-right:9px;}
 .q .qid{font-size:12.5px;color:var(--muted);}
-.q .stem{margin:11px 0 0;font-size:15.5px;line-height:1.9;white-space:pre-wrap;}
+/* 左欄題目（閱讀心理學排版）：收窄行寬→眼睛好回掃、加大行高→密集中文不擠、
+   事實段回流、試問分塊編號；題幹一律不上色不加粗（避免洩答） */
+.q .stem{margin:14px 0 0;font-size:17px;line-height:2.02;color:var(--ink);
+ letter-spacing:.005em;max-width:38em;white-space:normal;text-wrap:pretty;}
+.q .stem .st-narr{margin:0;}
+.q .stem .st-narr+.st-narr{margin-top:11px;}
+.q .stem .st-ask{margin-top:22px;}
+.q .stem .st-ask-lead{display:inline-block;font-size:12.5px;font-weight:700;color:#6e6e73;
+ letter-spacing:.16em;background:#f0f0f3;border-radius:980px;padding:3px 13px 3px 15px;margin-bottom:13px;}
+.q .stem .st-qs{list-style:none;counter-reset:sq;padding:0;margin:0;display:flex;flex-direction:column;gap:12px;}
+.q .stem .st-qs>li{counter-increment:sq;position:relative;padding:13px 17px 13px 46px;
+ background:#fbfbfd;border:1px solid #ececf0;border-radius:14px;line-height:1.95;}
+.q .stem .st-qs>li::before{content:counter(sq);position:absolute;left:13px;top:12px;
+ width:25px;height:25px;background:#e8e8ed;color:#48484a;border-radius:50%;letter-spacing:0;
+ font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+.q .stem .st-q-single{margin-top:2px;padding:13px 17px;background:#fbfbfd;
+ border:1px solid #ececf0;border-radius:14px;line-height:1.95;}
 .q .tag{font-size:12.5px;font-weight:800;color:#6e6e73;margin-top:14px;letter-spacing:.02em;}
 .q .tag.doc-t{color:#0a6cff;}      /* 學說＝藍 */
 .q .tag.prac-t{color:#1b9e57;}     /* 實務＝綠 */
@@ -386,7 +402,37 @@ function esc(s){return (s+'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':
 // (1)文→(1) 文：學說/實務內嵌標號補空白＋上色，讀起來不擠
 function beautify(s){return s.replace(/([(（][0-9]+[)）])/g,'<b class="enum">$1</b> ');}
 // 題幹裡「該爭點觸發的關鍵句」用紅虛線框起來（focus 為精準子字串陣列）
-function markFocus(stem,focus){let h=esc(stem);(focus||[]).forEach(f=>{const ef=esc(f);if(ef)h=h.split(ef).join('<span class="focus">'+ef+'</span>');});return h;}
+// 長→短排序＋佔位符：避免「短focus ⊂ 長focus」時短的先套插了 span 破壞長的比對（同題多爭點常見）
+function markFocus(stem,focus){let h=esc(stem);
+  const fs=[...new Set(focus||[])].filter(Boolean).sort((a,b)=>b.length-a.length);
+  const slots=[];
+  fs.forEach(f=>{const ef=esc(f);if(!ef)return;if(h.indexOf(ef)<0)return;
+    h=h.split(ef).join('\\u0000'+slots.length+'\\u0001');slots.push(ef);});
+  return h.replace(/\\u0000(\\d+)\\u0001/g,(_,i)=>'<span class="focus">'+slots[+i]+'</span>');}
+// 左欄題目排版（閱讀心理學）：併掉 PDF 硬換行讓事實段回流、試問依（N分）分塊編號；
+// 只動換行、不動任何字、不上色加粗（守題庫鐵律不洩答）。focus 子字串不含換行→重排後仍精準框。
+function formatStem(stem,focus){
+  if(!stem) return '';
+  let s=(stem+'').replace(/\\r/g,'').replace(/[｜|]\\s*$/,'').trim();
+  const reflow=t=>t.replace(/[ \\t]*\\n[ \\t]*/g,'').trim();   // 只併換行，保留行內單一空格(如「A 地」)→ focus 不破
+  let narrative=s,label=false,qpart='';
+  const m=s.match(/試\\s*問\\s*[：:]/);
+  if(m){ narrative=s.slice(0,m.index); label=m[0]; qpart=s.slice(m.index+m[0].length); }
+  else { const m2=s.match(/試\\s*[問說述論擬答回析陳]|問\\s*[：:]/);
+    if(m2&&m2.index>0){ narrative=s.slice(0,m2.index); qpart=s.slice(m2.index); } }
+  const narrHtml=narrative.split(/\\n[ \\t]*\\n/).map(reflow).filter(Boolean)
+    .map(p=>`<p class="st-narr">${markFocus(p,focus)}</p>`).join('');
+  if(!qpart.trim()) return narrHtml||`<p class="st-narr">${markFocus(reflow(s),focus)}</p>`;
+  let items=[],last=0,r;const re=/（\\s*\\d+\\s*分\\s*）/g;
+  while((r=re.exec(qpart))){ items.push(qpart.slice(last,r.index+r[0].length)); last=r.index+r[0].length; }
+  const tail=qpart.slice(last).trim(); if(tail) items.push(tail);
+  items=items.map(reflow).filter(Boolean);
+  const lead=label?`<div class="st-ask-lead">${esc(label)}</div>`:'';
+  const body=items.length>=2
+    ? `<ol class="st-qs">${items.map(it=>`<li>${markFocus(it,focus)}</li>`).join('')}</ol>`
+    : `<div class="st-q-single">${markFocus(items[0]||reflow(qpart),focus)}</div>`;
+  return narrHtml+`<div class="st-ask">${lead}${body}</div>`;
+}
 // 選擇題：先作答後揭示正解（點選作答 → ✓正解／✗你選的）
 function optionsHtml(options,correct){const L='ABCDEFGHIJ';
   const opts=options.map((o,i)=>`<div class="opt" data-letter="${L[i]}"><span class="ol">${L[i]}</span><span class="ot">${esc(o)}</span></div>`).join('');
@@ -478,7 +524,7 @@ function openDrawer(id,year){
     const kind=q.essay?'申論':'選擇';
     const opts=q.options?optionsHtml(q.options,q.correct):'';  // 選擇題選項＋正解
     return `<div class="q"><span class="yr">${q.year} 年</span><span class="qid">${esc(q.qid)} · ${kind}</span>
-      <div class="stem">${markFocus(q.stem,q.focus)}</div>${opts}${ex}</div>`;
+      <div class="stem">${formatStem(q.stem,q.focus)}</div>${opts}${ex}</div>`;
   }).join('')||'<p style="color:#86868b">（無資料）</p>';
   // 擬答（單年抽屜，每題）→ 移到右欄「解析」
   const ansHtml=year?qs.filter(q=>q.answer).map(q=>`<div class="tag ans-t">擬答</div><div class="md ans">${q.answer}</div>`).join(''):'';
