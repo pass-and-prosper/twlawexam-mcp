@@ -411,13 +411,28 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 .tabs{display:flex;gap:8px;margin-left:auto;}
 .tab{font-size:14px;font-weight:600;padding:7px 16px;border-radius:980px;border:none;background:#e8e8ed;color:#3a3a3c;cursor:pointer;}
 .tab.on{background:var(--blue);color:#fff;}
-.subbar{display:flex;gap:8px;overflow-x:auto;padding:11px 22px;background:#eef0f3;border-bottom:1px solid var(--line);
- -webkit-overflow-scrolling:touch;scrollbar-width:thin;}
+.subbar{display:flex;gap:8px;overflow:visible;padding:11px 22px;background:#eef0f3;border-bottom:1px solid var(--line);}
 .sbtn{flex:0 0 auto;font-size:13px;font-weight:500;padding:6px 14px;border-radius:980px;border:1px solid var(--line);
  background:#fff;color:#3a3a3c;cursor:pointer;white-space:nowrap;}
 .sbtn:hover{border-color:#c7c7cc;}
 .sbtn.on{background:var(--blue);color:#fff;border-color:var(--blue);}
 .sbtn.uc.on{background:var(--orange);border-color:var(--orange);}
+/* 選試科目：橫向 chip 列收成單一下拉（要哪科點進去）*/
+.subjsel{position:relative;flex:0 0 auto;}
+.subjbtn{display:inline-flex;align-items:center;gap:7px;font-size:14px;font-weight:600;padding:7px 16px;
+ border-radius:980px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;
+ box-shadow:0 1px 2px rgba(0,0,0,.04);white-space:nowrap;}
+.subjbtn:hover{border-color:#c7c7cc;}
+.subjbtn .subjlbl{color:var(--muted);}
+.subjbtn .caret{font-size:11px;color:var(--muted);}
+.ddmenu{position:absolute;top:calc(100% + 7px);left:0;z-index:30;display:flex;flex-direction:column;gap:2px;
+ background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 34px rgba(0,0,0,.16);
+ padding:6px;min-width:260px;max-height:72vh;overflow:auto;}
+.dditem{text-align:left;font-size:14px;font-weight:500;padding:9px 13px;border-radius:10px;border:none;
+ background:#fff;color:var(--ink);cursor:pointer;white-space:nowrap;}
+.dditem:hover{background:#f0f0f3;}
+.dditem.on{background:var(--blue);color:#fff;}
+.dditem.uc.on{background:var(--orange);}
 .legend{max-width:1080px;margin:14px auto 0;padding:0 22px;font-size:12.5px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;}
 .legend .d{display:inline-block;width:13px;height:13px;border-radius:50%;vertical-align:-2px;margin-right:5px;}
 .wrap{max-width:1080px;margin:0 auto;padding:14px 20px 90px;}
@@ -591,7 +606,7 @@ body{margin:0;background:var(--bg);color:var(--ink);letter-spacing:-.01em;
 
 _JS = """
 const $=s=>document.querySelector(s);
-let CUR_TAB='sl1',CUR_I=0,VIEW='list';   // 目前科目＋視圖（list 年表 / map 熱力圖）
+let CUR_TAB='sl1',CUR_I=0,VIEW='map';   // 目前科目＋視圖（list 年表 / map 熱力圖；預設熱力圖一進來就看到）
 const BLUE={109:'#dcecfb',110:'#bcdcfa',111:'#94c6f6',112:'#5aa6f0',113:'#2f8be8',114:'#0a5fc2'};
 function esc(s){return (s+'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 // (1)文→(1) 文：學說/實務內嵌標號補空白＋上色，讀起來不擠
@@ -683,9 +698,12 @@ function subjectCard(tab,sub){
 }
 function shortName(s){const m=s.match(/（(.+)）/);return m?m[1]:s;}
 function subjectBar(tab){
-  const chips=DATA[tab].map((s,i)=>`<button class="sbtn" data-tab="${tab}" data-i="${i}">${esc(shortName(s.subject))}</button>`).join('');
+  const items=DATA[tab].map((s,i)=>`<button class="dditem" data-tab="${tab}" data-i="${i}">${esc(shortName(s.subject))}</button>`).join('');
   const utc=(DATA.sl2||[]).reduce((a,s)=>a+((s.untested||[]).length),0);
-  return chips+`<button class="sbtn uc" data-tab="${tab}" data-i="uncov">🆕 未考過 ${utc}</button>`;
+  const menu=items+`<button class="dditem uc" data-tab="${tab}" data-i="uncov">🆕 未考過 ${utc}</button>`;
+  return `<div class="subjsel"><button class="subjbtn" id="subjbtn">`
+    +`<span class="subjlbl">選試科目</span><span id="subjcur"></span><span class="caret">▾</span></button>`
+    +`<div class="ddmenu hidden" id="ddmenu">${menu}</div></div>`;
 }
 function renderUncov(){
   const subs=(DATA.sl2||[]).filter(s=>(s.untested||[]).length);
@@ -749,7 +767,10 @@ function renderMap(tab,sub){
 }
 function selectSubject(tab,i){
   CUR_TAB=tab; CUR_I=i;
-  document.querySelectorAll('.sbtn').forEach(b=>b.classList.toggle('on', b.dataset.tab===tab && String(b.dataset.i)===String(i)));
+  document.querySelectorAll('.dditem').forEach(b=>b.classList.toggle('on', b.dataset.tab===tab && String(b.dataset.i)===String(i)));
+  const sel=document.querySelector(`.dditem[data-tab="${tab}"][data-i="${i}"]`), cur=$('#subjcur');
+  if(cur) cur.textContent = sel ? sel.textContent.trim() : '';
+  const dm=$('#ddmenu'); if(dm) dm.classList.add('hidden');   // 選完即收起選單
   $('#content').innerHTML = (i==='uncov') ? renderUncov()
     : (VIEW==='map' ? renderMap(tab, DATA[tab][i]) : subjectCard(tab, DATA[tab][i]));
   const lh=$('#leghint'); if(lh) lh.textContent = (VIEW==='map' && i!=='uncov')
@@ -822,6 +843,7 @@ function openDrawer(id,year){
 }
 function closeDrawer(){$('#scrim').classList.remove('on');$('#drawer').classList.remove('on');}
 document.addEventListener('click',e=>{
+  if(!e.target.closest('.subjsel')){const m=$('#ddmenu'); if(m) m.classList.add('hidden');}  // 點選單外處關閉
   const op=e.target.closest('.opt');  // 選擇題作答：先選才揭示正解
   if(op){const box=op.closest('.opts');
     if(box&&!box.classList.contains('answered')){
@@ -834,7 +856,8 @@ document.addEventListener('click',e=>{
   const v=e.target.closest('.vbtn'); if(v){VIEW=v.dataset.view;
     document.querySelectorAll('.vbtn').forEach(x=>x.classList.toggle('on',x.dataset.view===VIEW));
     selectSubject(CUR_TAB,CUR_I);return;}
-  const b=e.target.closest('.sbtn'); if(b){selectSubject(b.dataset.tab, b.dataset.i==='uncov'?'uncov':+b.dataset.i);return;}
+  const sb=e.target.closest('.subjbtn'); if(sb){const m=$('#ddmenu'); if(m) m.classList.toggle('hidden');return;}
+  const di=e.target.closest('.dditem'); if(di){selectSubject(di.dataset.tab, di.dataset.i==='uncov'?'uncov':+di.dataset.i);return;}
   const tm=e.target.closest('.tmcell[data-id]'); if(tm){openDrawer(tm.dataset.id,null);return;}
   const c=e.target.closest('.circ[data-id]'); if(c){openDrawer(c.dataset.id,c.dataset.year);return;}
   const l=e.target.closest('.label[data-id],.tip[data-id]'); if(l){openDrawer(l.dataset.id,null);}
@@ -882,10 +905,10 @@ def render(data: dict) -> str:
                        (s.get("untested", 0), "推測未考"), (s["total_q"], "題")]
     )
     legend = (
-        '<div class="legend"><span id="leghint">圈內＝民國年 · 顏色越深＝年份越近 · '
-        '×N＝該年題數 · 點圈看該年原題</span>'
-        '<span class="vtoggle"><button class="vbtn on" data-view="list">📋 年表</button>'
-        '<button class="vbtn" data-view="map">📊 熱力圖</button></span></div>'
+        '<div class="legend"><span id="leghint">方塊大小＝考過次數 · 顏色越濃＝考越多 · '
+        '點方塊看歷年原題</span>'
+        '<span class="vtoggle"><button class="vbtn" data-view="list">📋 年表</button>'
+        '<button class="vbtn on" data-view="map">📊 熱力圖</button></span></div>'
     )
     return (
         '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">'
