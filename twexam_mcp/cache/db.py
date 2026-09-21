@@ -2,7 +2,9 @@
 """SQLite + FTS5 layer. The ONLY module that touches the database."""
 from __future__ import annotations
 import json
+import os
 import sqlite3
+import sys
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -39,11 +41,56 @@ def connect(path, progress_path=None) -> sqlite3.Connection:
     # `prog`, so each write transaction touches a single database (atomic
     # regardless of journal mode); cross-DB JOINs against main.questions are
     # read-only and fine.
-    conn.execute("ATTACH DATABASE ? AS prog", (progress_path or _progress_path_for(path),))
+    if progress_path is None:
+        progress_path = (
+            str(default_progress_path()) if _is_default_bank(path) else _progress_path_for(path)
+        )
+    conn.execute("ATTACH DATABASE ? AS prog", (progress_path,))
+    # A brand-new progress DB (first run after `uvx`/`pip install`) has no
+    # tables yet; the bank itself is prebuilt so init_schema() is never called
+    # on the normal path. Guarantee the prog schema here so record_answer /
+    # get_progress / practice_weak work on a fresh install.
+    ensure_progress_schema(conn)
     return conn
 
 
+# Personal-progress schema (attached DB `prog`). Single source of truth: used by
+# init_schema() and by connect() for a fresh progress.db.
+_PROG_SCHEMA = """
+        -- Weak-point engine: immutable attempt log + per-question SR state.
+        -- Personal progress data; lives ONLY in the attached, git-ignored
+        -- prog (progress.db) — never in the shippable bank (questions.db).
+        -- All reads/writes of these two tables are qualified with `prog.`.
+        CREATE TABLE IF NOT EXISTS prog.attempts (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            qid         TEXT NOT NULL,
+            user_answer TEXT,
+            is_correct  INTEGER,          -- 1/0; NULL = essay self-grade omitted
+            answered_at TEXT NOT NULL      -- ISO date (YYYY-MM-DD)
+        );
+        CREATE INDEX IF NOT EXISTS prog.idx_attempts_qid ON attempts(qid);
+        CREATE TABLE IF NOT EXISTS prog.review_state (
+            qid          TEXT PRIMARY KEY,
+            last_answer  TEXT,
+            last_correct INTEGER,
+            n_attempts   INTEGER NOT NULL DEFAULT 0,
+            n_correct    INTEGER NOT NULL DEFAULT 0,
+            streak       INTEGER NOT NULL DEFAULT 0,   -- consecutive correct
+            interval_days INTEGER NOT NULL DEFAULT 0,
+            due_date     TEXT,                          -- ISO date next due
+            updated_at   TEXT
+        );
+        CREATE INDEX IF NOT EXISTS prog.idx_review_due ON review_state(due_date);
+"""
+
+
+def ensure_progress_schema(conn: sqlite3.Connection) -> None:
+    """Create the attached progress tables if missing (idempotent)."""
+    conn.executescript(_PROG_SCHEMA)
+
+
 def init_schema(conn: sqlite3.Connection) -> None:
+    conn.executescript(_PROG_SCHEMA)
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS questions (
@@ -73,31 +120,6 @@ def init_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_q_exam_year ON questions(exam_code, year);
         CREATE INDEX IF NOT EXISTS idx_q_subject ON questions(subject);
         CREATE INDEX IF NOT EXISTS idx_q_topic ON questions(topic_point);
-
-        -- Weak-point engine: immutable attempt log + per-question SR state.
-        -- Personal progress data; lives ONLY in the attached, git-ignored
-        -- prog (progress.db) — never in the shippable bank (questions.db).
-        -- All reads/writes of these two tables are qualified with `prog.`.
-        CREATE TABLE IF NOT EXISTS prog.attempts (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            qid         TEXT NOT NULL,
-            user_answer TEXT,
-            is_correct  INTEGER,          -- 1/0; NULL = essay self-grade omitted
-            answered_at TEXT NOT NULL      -- ISO date (YYYY-MM-DD)
-        );
-        CREATE INDEX IF NOT EXISTS prog.idx_attempts_qid ON attempts(qid);
-        CREATE TABLE IF NOT EXISTS prog.review_state (
-            qid          TEXT PRIMARY KEY,
-            last_answer  TEXT,
-            last_correct INTEGER,
-            n_attempts   INTEGER NOT NULL DEFAULT 0,
-            n_correct    INTEGER NOT NULL DEFAULT 0,
-            streak       INTEGER NOT NULL DEFAULT 0,   -- consecutive correct
-            interval_days INTEGER NOT NULL DEFAULT 0,
-            due_date     TEXT,                          -- ISO date next due
-            updated_at   TEXT
-        );
-        CREATE INDEX IF NOT EXISTS prog.idx_review_due ON review_state(due_date);
 
         -- Per-考點 study primer: must-know 法條/判決/釋字/學說/陷阱, read before drilling.
         CREATE TABLE IF NOT EXISTS topic_notes (
@@ -377,10 +399,51 @@ def default_db_path() -> Path:
     return Path(__file__).resolve().parent.parent / "data" / "questions.db"
 
 
+def _is_default_bank(path) -> bool:
+    s = str(path)
+    if s == ":memory:":
+        return False
+    try:
+        return Path(s).resolve() == default_db_path()
+    except OSError:
+        return False
+
+
+def _user_data_dir() -> Path:
+    """Per-user, upgrade-safe data directory (no third-party dependency)."""
+    if os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        base = str(Path.home() / "Library" / "Application Support")
+    else:
+        base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return Path(base) / "twlawexam-mcp"
+
+
 def default_progress_path() -> Path:
-    """git-ignored personal-progress DB (attempts/review_state), sibling of the
-    shippable bank. Attached as `prog` by connect()."""
-    return Path(_progress_path_for(default_db_path()))
+    """Personal-progress DB (attempts/review_state), attached as `prog` by connect().
+
+    Resolution order:
+      1. ``TWEXAM_PROGRESS_DB`` env var — explicit location.
+      2. Legacy sibling ``progress.db`` next to the bank, if it already exists
+         (dev checkouts and pre-0.6 installs keep their history untouched).
+      3. Per-user data dir (``%LOCALAPPDATA%/twlawexam-mcp`` on Windows,
+         ``~/Library/Application Support/twlawexam-mcp`` on macOS,
+         ``$XDG_DATA_HOME`` or ``~/.local/share/twlawexam-mcp`` elsewhere).
+
+    (3) is what a ``uvx`` / ``pip install`` user gets. The package itself lives
+    in a cache/site-packages dir that is replaced on every upgrade, so a
+    sibling file there would be wiped each release — progress must live
+    outside the package."""
+    env = os.environ.get("TWEXAM_PROGRESS_DB")
+    if env:
+        return Path(env)
+    legacy = Path(_progress_path_for(default_db_path()))
+    if legacy.exists():
+        return legacy
+    d = _user_data_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "progress.db"
 
 
 def load_seed(conn: sqlite3.Connection) -> int:
