@@ -1,4 +1,4 @@
-月度刷新 twexam 的「還沒考過的重要爭點」預測（5 來源）。本機 repo：w:\FastAPI\twexam-mcp（已是 cwd）。你是吃到飽訂閱，可用 subagent 平行研究，$0。
+月度刷新 twexam 的「還沒考過的重要爭點」預測（5 來源）。本機 repo：專案根目錄（已是 cwd）。你是吃到飽訂閱，可用 subagent 平行研究，$0。
 
 目標：重跑下列 5 來源，找「重要但司律二試還沒考過」的爭點，整併進 twexam_mcp/data/untested_issues.json，重生 topic-atlas.html，最後本機 commit（**不要 push**；推由使用者手動，pre-push hook 把關）。
 

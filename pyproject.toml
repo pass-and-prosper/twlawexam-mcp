@@ -1,16 +1,49 @@
 [project]
-name = "twexam-mcp"
-version = "0.5.0"
-description = "Taiwan legal-exam question bank MCP server"
+name = "twlawexam-mcp"
+version = "0.6.0"
+description = "台灣司法官／律師考試歷屆試題 MCP 伺服器：查題、練習、弱點複習、申論批改。Taiwan bar & judicial exam question-bank MCP server for Claude Code / Claude Desktop."
+readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["mcp>=1.2.0"]
+# Lower bound: FastMCP(instructions=...) and streamable_http_app() (used by
+# http_app.py) both exist from 1.8. Upper bound: mcp 2.x renamed FastMCP ->
+# MCPServer and this code targets the v1 API.
+dependencies = ["mcp>=1.8.0,<2"]
 license = {text = "MIT"}
+authors = [{name = "pass-and-prosper"}]
+keywords = [
+    "mcp", "model-context-protocol", "claude", "claude-code", "claude-desktop",
+    "taiwan", "law", "bar-exam", "legal-exam", "司律", "律師考試", "司法官考試", "國家考試", "考選部",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Education",
+    "Intended Audience :: Legal Industry",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: Chinese (Traditional)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Education",
+    "Topic :: Education :: Computer Aided Instruction (CAI)",
+]
+
+[project.urls]
+Homepage = "https://github.com/pass-and-prosper/twlawexam-mcp"
+Repository = "https://github.com/pass-and-prosper/twlawexam-mcp"
+Issues = "https://github.com/pass-and-prosper/twlawexam-mcp/issues"
 
 [project.scripts]
+# `uvx twlawexam-mcp` runs the console script that shares the package name.
+# `twexam-mcp` is kept so existing local configs keep working.
+twlawexam-mcp = "twexam_mcp.server:main"
 twexam-mcp = "twexam_mcp.server:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+# pymupdf: the test suite imports the ingest PDF parser at collection time.
+dev = ["pytest>=8.0", "pymupdf>=1.24"]
 ingest = ["playwright>=1.40", "pymupdf>=1.24", "httpx>=0.27"]
 llm = ["google-genai>=1.0"]
 

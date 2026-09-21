@@ -55,18 +55,37 @@ def main() -> int:
     if leaked:
         print(
             f"ERROR: {DB} contains {leaked} personal-progress row(s) — refusing to "
-            "ship. Practice history must live only in the git-ignored progress.db. "
-            "Run scripts/migrate_progress_db.py (or DROP attempts/review_state from "
-            "the bank) before building.",
+            "ship. Practice history must live only in the separate progress.db. "
+            "Run scripts/migrate_progress_db.py (it moves the rows out and VACUUMs) "
+            "before building. Do NOT just DROP the tables: with secure_delete off, "
+            "dropped rows linger in free pages and would still ship.",
             file=sys.stderr,
         )
         return 2
 
-    subprocess.run(
-        [sys.executable, "-m", "pip", "wheel", ".", "--no-deps", "-w", str(DIST)],
-        cwd=ROOT, check=True,
-    )
-    print("[build] wheel written to dist/ — bank is clean, no practice history bundled")
+    # Rewrite the bank file so free pages (anything ever deleted) do not ship.
+    conn = sqlite3.connect(DB)
+    try:
+        conn.execute("VACUUM")
+    finally:
+        conn.close()
+
+    # `uv build` produces both sdist and wheel (what PyPI wants). Without uv,
+    # use the `build` frontend; refuse to silently produce only a wheel.
+    import shutil
+    if shutil.which("uv"):
+        subprocess.run(["uv", "build", "--out-dir", str(DIST)], cwd=ROOT, check=True)
+    else:
+        try:
+            import build  # noqa: F401
+        except ImportError:
+            print("ERROR: need `uv` or `pip install build` to produce sdist+wheel",
+                  file=sys.stderr)
+            return 3
+        subprocess.run([sys.executable, "-m", "build", "--outdir", str(DIST)],
+                       cwd=ROOT, check=True)
+    made = sorted(p.name for p in DIST.iterdir() if p.suffix in (".whl", ".gz"))
+    print(f"[build] {made} written to dist/ — bank VACUUMed, no practice history bundled")
     return 0
 
 
